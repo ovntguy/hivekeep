@@ -215,11 +215,17 @@ describe('HTTP connect / listTools / callTool', () => {
     expect(lastHttpCtor?.url).toBe('https://mcp.example.com/mcp')
   })
 
+  async function callResolved(tools: Awaited<ReturnType<typeof resolveMCPTools>>, name: string, args: Record<string, unknown>) {
+    const resolved = tools[name]
+    if (!resolved?.execute) throw new Error(`missing tool ${name}`)
+    return resolved.execute(args, { messages: [], toolCallId: 't1' } as never)
+  }
+
   it('exposes mcp_<server>_<tool> and forwards callTool', async () => {
     servers = [remoteServer()]
     const tools = await resolveMCPTools('agent-1')
     expect(Object.keys(tools)).toEqual(['mcp_remote_echo'])
-    const result = await tools.mcp_remote_echo!.execute({ text: 'hi' }, { messages: [], toolCallId: 't1' } as never)
+    const result = await callResolved(tools, 'mcp_remote_echo', { text: 'hi' })
     expect(result).toBe('echo:hi')
     expect(callToolCalls).toEqual([{ name: 'echo', arguments: { text: 'hi' } }])
   })
@@ -228,7 +234,7 @@ describe('HTTP connect / listTools / callTool', () => {
     servers = [remoteServer()]
     const tools = await resolveMCPTools('agent-1')
     failNextCall = true
-    const result = await tools.mcp_remote_echo!.execute({ text: 'retry' }, { messages: [], toolCallId: 't2' } as never)
+    const result = await callResolved(tools, 'mcp_remote_echo', { text: 'retry' })
     expect(result).toBe('echo:retry')
     expect(connectCalls).toBe(2)
     expect(callToolCalls).toHaveLength(2)
