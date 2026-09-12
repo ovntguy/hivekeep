@@ -141,6 +141,9 @@ export type QueueItemPriority = 'user' | 'agent' | 'task'
 
 export type McpServerStatus = 'active' | 'pending_approval'
 
+/** How Hivekeep connects to an MCP server. `http` is Streamable HTTP. */
+export type McpTransport = 'stdio' | 'http' | 'sse'
+
 export type PaletteId = 'aurora' | 'ocean' | 'forest' | 'sunset' | 'monochrome' | 'sakura' | 'neon' | 'lavender' | 'midnight' | 'copper' | 'jade' | 'crimson' | 'galaxy' | 'amber' | 'slate' | 'rose' | 'mint' | 'citrus'
 
 export interface ApiError {

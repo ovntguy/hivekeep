@@ -1,5 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { tool as aiTool } from '@/server/tools/tool-helper'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
@@ -8,6 +10,12 @@ import { createLogger } from '@/server/logger'
 import { augmentedPath, killProcessTree } from '@/server/lib/process'
 import { mcpServers, agentMcpServers } from '@/server/db/schema'
 import type { Tool } from '@/server/tools/tool-helper'
+import {
+  isRemoteMcpTransport,
+  normalizeMcpTransport,
+  parseSecretRecord,
+  type McpTransport,
+} from '@/server/services/mcp-config'
 
 const log = createLogger('mcp')
 
@@ -16,9 +24,15 @@ const log = createLogger('mcp')
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+type McpClientTransport =
+  | StdioClientTransport
+  | StreamableHTTPClientTransport
+  | SSEClientTransport
+
 interface MCPConnection {
   client: Client
-  transport: StdioClientTransport
+  transport: McpClientTransport
+  kind: McpTransport
   tools: MCPToolDef[]
   serverId: string
   serverName: string
@@ -37,6 +51,52 @@ const connections = new Map<string, MCPConnection>()
 const MCP_CONNECT_TIMEOUT_MS = 30_000
 const MCP_CALL_TIMEOUT_MS = 120_000 // 2 minutes max for any single MCP tool call
 
+/** Build the official SDK transport for a stored MCP server row. */
+export function createMcpTransport(server: {
+  name: string
+  command?: string | null
+  args?: string | null
+  env?: string | null
+  transport?: string | null
+  url?: string | null
+  headers?: string | null
+}): { kind: McpTransport; transport: McpClientTransport } {
+  const kind = normalizeMcpTransport(server.transport)
+
+  if (isRemoteMcpTransport(kind)) {
+    const rawUrl = server.url?.trim()
+    if (!rawUrl) {
+      throw new Error(`MCP server ${server.name} is missing a URL`)
+    }
+    const url = new URL(rawUrl)
+    const headers = parseSecretRecord(server.headers)
+    const opts = Object.keys(headers).length > 0
+      ? { requestInit: { headers } }
+      : undefined
+
+    if (kind === 'sse') {
+      return { kind, transport: new SSEClientTransport(url, opts) }
+    }
+    return { kind, transport: new StreamableHTTPClientTransport(url, opts) }
+  }
+
+  if (!server.command?.trim()) {
+    throw new Error(`MCP server ${server.name} is missing a command`)
+  }
+
+  const args = server.args ? JSON.parse(server.args) as string[] : []
+  const env = server.env ? JSON.parse(server.env) as Record<string, string> : {}
+
+  return {
+    kind,
+    transport: new StdioClientTransport({
+      command: server.command,
+      args,
+      env: { ...process.env, PATH: augmentedPath, ...env } as Record<string, string>,
+    }),
+  }
+}
+
 async function connectToServer(serverId: string): Promise<MCPConnection | null> {
   const server = await db.select().from(mcpServers).where(eq(mcpServers.id, serverId)).get()
   if (!server) return null
@@ -46,17 +106,11 @@ async function connectToServer(serverId: string): Promise<MCPConnection | null> 
     return null
   }
 
+  let client: Client | undefined
   try {
-    const args = server.args ? JSON.parse(server.args) as string[] : []
-    const env = server.env ? JSON.parse(server.env) as Record<string, string> : {}
+    const { kind, transport } = createMcpTransport(server)
 
-    const transport = new StdioClientTransport({
-      command: server.command,
-      args,
-      env: { ...process.env, PATH: augmentedPath, ...env } as Record<string, string>,
-    })
-
-    const client = new Client({
+    client = new Client({
       name: 'hivekeep',
       version: '1.0.0',
     })
@@ -85,17 +139,21 @@ async function connectToServer(serverId: string): Promise<MCPConnection | null> 
     const conn: MCPConnection = {
       client,
       transport,
+      kind,
       tools,
       serverId,
       serverName: server.name,
     }
 
     connections.set(serverId, conn)
-    log.info({ serverId, serverName: server.name, toolCount: tools.length }, 'MCP server connected')
+    log.info({ serverId, serverName: server.name, kind, toolCount: tools.length }, 'MCP server connected')
 
     return conn
   } catch (err) {
     log.error({ serverId, serverName: server.name, err }, 'MCP connection failed')
+    if (client) {
+      try { await client.close() } catch { /* ignore */ }
+    }
     return null
   }
 }
@@ -121,8 +179,11 @@ process.on('SIGTERM', () => { disconnectAll().finally(() => process.exit(0)) })
 export async function disconnectServer(serverId: string) {
   const conn = connections.get(serverId)
   if (conn) {
-    // Grab the PID before close() clears it
-    const pid = conn.transport.pid
+    // Grab the PID before close() clears it. HTTP/SSE transports have no
+    // process tree — do not call killProcessTree on those connections.
+    const pid = conn.kind === 'stdio' && conn.transport instanceof StdioClientTransport
+      ? conn.transport.pid
+      : undefined
     try {
       await conn.client.close()
     } catch { /* ignore */ }
