@@ -193,6 +193,10 @@ The script installs [Bun](https://bun.sh) if needed, clones the repo, builds the
 
 Then open `http://localhost:3000` and **Queenie takes it from there**: three quick screens, then she configures everything by conversation.
 
+### Windows 11 (native Bun, no WSL)
+
+`install.sh` is Linux/macOS only. On Windows 11 you can run Hivekeep with native Bun (no WSL, no Docker): see **[docs/windows.md](docs/windows.md)** (runbook + Task Scheduler) and `scripts/windows/`. Known limitations: [docs/windows-gaps.md](docs/windows-gaps.md).
+
 ### Docker (alternative)
 
 ```bash
