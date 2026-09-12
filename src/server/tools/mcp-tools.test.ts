@@ -227,6 +227,32 @@ describe('addMcpServerTool', () => {
     expect(notificationsCreated[0]!.title).toContain('approval')
   })
 
+  it('creates an HTTP server with url and headers', async () => {
+    const result = await execute(addMcpServerTool as ToolRegistration, {
+      name: 'hosted',
+      transport: 'http',
+      url: 'https://mcp.example.com/mcp',
+      headers: { Authorization: 'Bearer secret' },
+    })
+
+    expect(result.serverId).toBe('test-uuid-1234')
+    expect(result.transport).toBe('http')
+    expect(result.status).toBe('active')
+    expect(dbStore['mcp_servers']![0]!.transport).toBe('http')
+    expect(dbStore['mcp_servers']![0]!.url).toBe('https://mcp.example.com/mcp')
+    expect(dbStore['mcp_servers']![0]!.command).toBe('')
+    expect(dbStore['mcp_servers']![0]!.headers).toBe(JSON.stringify({ Authorization: 'Bearer secret' }))
+  })
+
+  it('rejects a remote server without a URL', async () => {
+    const result = await execute(addMcpServerTool as ToolRegistration, {
+      name: 'hosted',
+      transport: 'sse',
+    })
+    expect(result.error).toContain('url')
+    expect(dbStore['mcp_servers']).toBeUndefined()
+  })
+
   it('handles missing optional args and env', async () => {
     const result = await execute(addMcpServerTool as ToolRegistration, {
       name: 'minimal',
@@ -382,6 +408,29 @@ describe('updateMcpServerTool', () => {
     expect(JSON.parse(lastUpdate.env)).toEqual({ KEY: 'val' })
   })
 
+  it('disconnects server when url or headers change', async () => {
+    dbStore['mcp_servers'] = [{
+      id: 'srv-1',
+      name: 'hosted',
+      command: '',
+      args: null,
+      env: null,
+      transport: 'http',
+      url: 'https://old.example.com/mcp',
+      headers: '{"Authorization":"Bearer old"}',
+      status: 'active',
+    }]
+
+    await execute(updateMcpServerTool as ToolRegistration, {
+      server_id: 'srv-1',
+      url: 'https://new.example.com/mcp',
+    })
+
+    expect(disconnectedIds).toEqual(['srv-1'])
+    expect(lastUpdate.url).toBe('https://new.example.com/mcp')
+    expect(lastUpdate.transport).toBe('http')
+  })
+
   it('broadcasts SSE event with correct name', async () => {
     dbStore['mcp_servers'] = [{
       id: 'srv-1',
@@ -481,5 +530,24 @@ describe('listMcpServersTool', () => {
     expect(result.servers[0].args).toEqual(['-y', 'pkg'])
     expect(result.servers[1].args).toEqual([])
     expect(result.servers[1].status).toBe('pending_approval')
+    expect(result.servers[0].transport).toBe('stdio')
+  })
+
+  it('returns transport and url for remote servers', async () => {
+    dbStore['mcp_servers'] = [{
+      id: 'srv-http',
+      name: 'hosted',
+      command: '',
+      args: null,
+      transport: 'http',
+      url: 'https://mcp.example.com/mcp',
+      status: 'active',
+      createdByAgentId: null,
+    }]
+
+    const result = await execute(listMcpServersTool as ToolRegistration, {})
+    expect(result.servers[0].transport).toBe('http')
+    expect(result.servers[0].url).toBe('https://mcp.example.com/mcp')
+    expect(result.servers[0].command).toBeNull()
   })
 })

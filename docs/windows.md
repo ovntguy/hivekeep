@@ -285,6 +285,12 @@ Stop the other process, or set `PORT=3001` (and matching `PUBLIC_URL`) in `.env`
 
 First start prints that it generated `ENCRYPTION_KEY` in the data directory. If you later point `HIVEKEEP_DATA_DIR` at an empty folder, Hivekeep mints a **new** key and cannot decrypt the old vault. Keep data dir + `.encryption-key` together.
 
+## MCP servers on Windows
+
+**Remote HTTP MCP** (Settings → MCP Servers → Remote URL) is the path that does not need a local Node toolchain, `npx`, WSL, or Docker. Hivekeep connects with the official Streamable HTTP transport (or legacy SSE). See [MCP](../docs-site/src/content/docs/features/mcp.md) and [docs/mcp-http.md](mcp-http.md).
+
+Local stdio MCP (`npx …`) can still work if those tools are on PATH, but it is the awkward path on native Windows.
+
 ## Script reference
 
 | Script | Role |

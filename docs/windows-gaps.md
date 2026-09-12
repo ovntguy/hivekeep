@@ -49,6 +49,7 @@ These scripts and docs were **not** executed on the physical Windows 11 PC that 
 | `HOST=127.0.0.1` | Same as `.env.example`. LAN access needs `0.0.0.0` and a matching `PUBLIC_URL`. |
 | Cron timezone | Set `HIVEKEEP_TIMEZONE` to an IANA name (`America/Chicago`). Windows display names are not mapped automatically. |
 | Contributor pre-commit | Relies on `sh` + Bun on PATH. Fine in Git Bash; not required to **run** Hivekeep. |
+| Local stdio MCP (`npx`) | Still needs a host binary / npm on PATH. **Remote HTTP/SSE MCP** is supported (Streamable HTTP preferred) and does not need WSL or Docker. |
 
 ## What is in scope for this path
 
