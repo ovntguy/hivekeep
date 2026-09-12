@@ -408,6 +408,30 @@ describe('updateMcpServerTool', () => {
     expect(JSON.parse(lastUpdate.env)).toEqual({ KEY: 'val' })
   })
 
+  it('preserves existing headers when incoming values are empty', async () => {
+    dbStore['mcp_servers'] = [{
+      id: 'srv-1',
+      name: 'hosted',
+      command: '',
+      args: null,
+      env: null,
+      transport: 'http',
+      url: 'https://mcp.example.com/mcp',
+      headers: JSON.stringify({ Authorization: 'Bearer secret', 'X-Extra': 'keep' }),
+      status: 'active',
+    }]
+
+    await execute(updateMcpServerTool as ToolRegistration, {
+      server_id: 'srv-1',
+      headers: { Authorization: '', 'X-New': 'added' },
+    })
+
+    const parsed = JSON.parse(lastUpdate.headers)
+    expect(parsed.Authorization).toBe('Bearer secret')
+    expect(parsed['X-New']).toBe('added')
+    expect(parsed['X-Extra']).toBe('keep')
+  })
+
   it('disconnects server when url or headers change', async () => {
     dbStore['mcp_servers'] = [{
       id: 'srv-1',

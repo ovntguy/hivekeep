@@ -7,6 +7,7 @@ import { mcpServers, agentMcpServers } from '@/server/db/schema'
 import { disconnectServer } from '@/server/services/mcp'
 import {
   isRemoteMcpTransport,
+  mergeSecretRecord,
   normalizeMcpTransport,
   parseArgs,
   parseSecretRecord,
@@ -156,13 +157,16 @@ export const updateMcpServerTool: ToolRegistration = {
 
           let nextEnv: Record<string, string> | null = parseSecretRecord(existing.env)
           if (env !== undefined) {
-            // Agent updates are additive: omitted keys stay, provided keys override.
-            nextEnv = env ? { ...parseSecretRecord(existing.env), ...env } : null
+            // Additive like the original agent merge, but empty values preserve
+            // stored secrets the same way REST PATCH does via mergeSecretRecord.
+            const existingEnv = parseSecretRecord(existing.env)
+            nextEnv = env ? { ...existingEnv, ...mergeSecretRecord(existingEnv, env) } : null
           }
 
           let nextHeaders: Record<string, string> | null = parseSecretRecord(existing.headers)
           if (headers !== undefined) {
-            nextHeaders = headers ? { ...parseSecretRecord(existing.headers), ...headers } : null
+            const existingHeaders = parseSecretRecord(existing.headers)
+            nextHeaders = headers ? { ...existingHeaders, ...mergeSecretRecord(existingHeaders, headers) } : null
           }
 
           const validation = validateMcpServerConfig({
