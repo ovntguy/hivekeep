@@ -3,36 +3,54 @@ title: MCP, Model Context Protocol
 description: "Connect external MCP servers to Hivekeep so their tools become callable by your Agents, with global scope, toolbox-based granting, and approval controls."
 ---
 
-The Model Context Protocol (MCP) is an open standard for exposing tools to an LLM through a small server process. Hivekeep can act as an MCP **client**: you register external MCP servers, Hivekeep launches them, discovers the tools they expose, and makes those tools callable by your Agents alongside Hivekeep's own native tools.
+The Model Context Protocol (MCP) is an open standard for exposing tools to an LLM through a small server. Hivekeep can act as an MCP **client**: you register external MCP servers, Hivekeep connects to them, discovers the tools they expose, and makes those tools callable by your Agents alongside Hivekeep's own native tools.
 
 This lets you bolt on capabilities Hivekeep does not ship with, a filesystem server, a database server, a third-party API wrapper, without writing a plugin, as long as the capability already exists as an MCP server.
 
 ## How the connection works
 
-Hivekeep connects to MCP servers over **stdio**: it runs a local command, and talks to it over standard input and output. A registered server is defined by:
+Hivekeep speaks the official MCP TypeScript SDK transports. A registered server is one of:
+
+- **Local command (stdio)**: Hivekeep runs an executable on the same host and talks to it over standard input and output.
+- **Remote URL (Streamable HTTP)**: Hivekeep connects to an `http(s)://` endpoint using `StreamableHTTPClientTransport` (the current MCP remote transport).
+- **Remote URL (SSE, legacy)**: same idea, using `SSEClientTransport` for older servers that have not moved to Streamable HTTP yet.
+
+A server is defined by:
 
 - **name**: a display name (also used to derive the tool prefix).
-- **command**: the executable to run, for example `npx`, `node`, or `python`.
-- **args**: an optional list of arguments passed to the command.
-- **env**: optional environment variables for the process (merged on top of Hivekeep's own environment). This is where you put the server's API keys or paths. Env values are stored and never sent back to the frontend; the UI only shows which keys exist.
+- **transport**: `stdio`, `http`, or `sse`.
+- **command / args / env** (stdio): the executable, arguments, and environment variables (merged on top of Hivekeep's own environment). Env values are stored and never sent back to the frontend; the UI only shows which keys exist.
+- **url / headers** (http and sse): the remote endpoint and optional HTTP headers (bearer token, API keys). Header values are stored and redacted the same way as env.
 
-On first use Hivekeep spawns the process, performs the MCP handshake (with a 30-second connection timeout), and calls the server's `listTools` to learn what it offers. Connections are pooled and reused; one live connection per server. Individual tool calls have a 2-minute timeout, and if a call fails because the connection died, Hivekeep reconnects once and retries.
+On first use Hivekeep opens the transport, performs the MCP handshake (with a 30-second connection timeout), and calls the server's `listTools` to learn what it offers. Connections are pooled and reused; one live connection per server. Individual tool calls have a 2-minute timeout, and if a call fails because the connection died, Hivekeep reconnects once and retries.
 
 :::note
-There is no remote or HTTP transport. Hivekeep launches MCP servers as local child processes via stdio, so the server's command must be runnable on the same host as Hivekeep (the binary or package must be present, for example via `npx`). When Hivekeep shuts down it terminates the whole process tree of each server.
+Remote HTTP is especially useful on **Windows 11 native** installs, where local `npx` MCP servers are awkward. You do not need WSL or Docker for a hosted Streamable HTTP / SSE server. Hivekeep still supports stdio when you do have a local binary.
 :::
+
+When Hivekeep shuts down it closes every pooled connection. For **stdio** it also terminates the whole process tree of each server. HTTP and SSE connections have no process tree, so they are only closed, never `kill`ed.
 
 ## Registering a server
 
-You manage MCP servers from the app (Settings). Provide the command, args, and any environment variables, then save. A typical example, registering the official filesystem server:
+You manage MCP servers from the app (Settings). Pick **Local command** or **Remote URL**, fill in command/args/env or URL/headers, then save.
+
+A typical local example, registering the official filesystem server:
 
 - **name**: `Filesystem`
+- **transport**: `stdio`
 - **command**: `npx`
 - **args**: `["-y", "@modelcontextprotocol/server-filesystem", "/data/shared"]`
 
+A typical remote example:
+
+- **name**: `Hosted tools`
+- **transport**: `http` (Streamable HTTP) or `sse` if the server is still on the older transport
+- **url**: `https://mcp.example.com/mcp`
+- **headers** / bearer token: optional `Authorization: Bearer …` or other API-key headers
+
 After registering you can check the connection status or run a fresh connection test from the UI; the test evicts any cached connection and reconnects so you see the live result and the number of tools discovered.
 
-Servers have a status. An `active` server contributes its tools; a `pending_approval` server contributes nothing until approved (see below). Editing a server's command, args, or env disconnects it so the next call reconnects with the new configuration.
+Servers have a status. An `active` server contributes its tools; a `pending_approval` server contributes nothing until approved (see below). Editing a server's connection settings (command, args, env, url, headers, or transport) disconnects it so the next call reconnects with the new configuration.
 
 ## How the tools surface to Agents
 
@@ -58,21 +76,25 @@ Agents can also create and manage MCP servers through tools, not just admins thr
 
 | Tool | What it does |
 |---|---|
-| `add_mcp_server` | Register a new server (name, command, args, env). It is auto-linked to the calling Agent. |
-| `update_mcp_server` | Change a server's name, command, args, or env (env is merged with existing values). |
+| `add_mcp_server` | Register a new server (name, transport, command/args/env or url/headers). It is auto-linked to the calling Agent. |
+| `update_mcp_server` | Change a server's name or connection settings (env and headers are merged with existing values). |
 | `remove_mcp_server` | Delete a server, disconnect it, and remove it from all Agents. |
-| `list_mcp_servers` | List every server on the platform with its command and status. |
+| `list_mcp_servers` | List every server on the platform with transport, command or URL, and status. |
 
 ## Approval
 
-Because an MCP server runs an arbitrary local command, letting an Agent add one is sensitive. The `MCP_REQUIRE_APPROVAL` setting (default **true**) controls this: when on, a server created by an Agent via `add_mcp_server` starts in `pending_approval` and contributes no tools until an admin approves it from the UI. Hivekeep also raises a persistent notification so you know a server is waiting. Set `MCP_REQUIRE_APPROVAL=false` to let Agent-created servers become active immediately (only do this if you trust what your Agents will register).
+Letting an Agent add an MCP server is sensitive: stdio runs an arbitrary local command, and HTTP servers receive whatever headers you store. The `MCP_REQUIRE_APPROVAL` setting (default **true**) controls this: when on, a server created by an Agent via `add_mcp_server` starts in `pending_approval` and contributes no tools until an admin approves it from the UI. Hivekeep also raises a persistent notification so you know a server is waiting. Set `MCP_REQUIRE_APPROVAL=false` to let Agent-created servers become active immediately (only do this if you trust what your Agents will register).
 
 ## Limits and behaviour to expect
 
-- **stdio only.** No remote MCP endpoints; the server must run locally as a child process.
-- **Tools only.** Hivekeep consumes the MCP `listTools` and `callTool` surface. Tool inputs are converted from the server's JSON Schema into the internal schema Agents call against; unusual or deeply nested schemas may be simplified, and unknown shapes fall back to accepting any object.
-- **Timeouts.** 30 seconds to connect, 2 minutes per tool call. A failed call triggers one reconnect-and-retry before returning an error to the Agent.
+- **Transports.** stdio, Streamable HTTP (`http`), and legacy SSE (`sse`). There is no auto-detect: pick the transport the server actually speaks. WebSocket and other unofficial transports are not supported.
+- **Auth.** Optional static headers and a bearer token (stored as `Authorization`). Hivekeep does **not** implement the MCP OAuth authorization-code flow, dynamic client registration, or rotating tokens. If the remote server requires an interactive OAuth handshake, it will not connect from Hivekeep today.
+- **Secrets.** Env (stdio) and headers (HTTP/SSE) are stored on the server and redacted in the API and UI. They are not vault entries; they follow the same empty-value-preserves-secret merge as stdio env.
+- **Tools only.** Hivekeep consumes the MCP `listTools` and `callTool` surface. Resources, prompts, sampling, and completions are not exposed. Tool inputs are converted from the server's JSON Schema into the internal schema Agents call against; unusual or deeply nested schemas may be simplified, and unknown shapes fall back to accepting any object.
+- **Timeouts.** 30 seconds to connect (including `listTools`), 2 minutes per tool call. A failed call triggers one reconnect-and-retry before returning an error to the Agent.
+- **Process cleanup.** stdio servers are killed as a process tree on disconnect or shutdown. HTTP/SSE connections are only closed.
 - **Granting is explicit.** Servers are global, but a tool is only callable by an Agent whose toolbox lists that tool's `mcp_*` name.
+- **SDK.** Hivekeep uses `@modelcontextprotocol/sdk` (1.29 in the lockfile). Streamable HTTP and SSE are the official client transports from that package; no private protocol.
 
 ## Related
 
