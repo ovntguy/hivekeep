@@ -67,7 +67,7 @@ An Agent = name / role / character / expertise + a `model` + a set of `toolboxes
   - **llm:** `anthropic`, `anthropic-oauth` (Claude Max subscription, no API key), `openai`, `openai-codex` (Codex CLI, no API key), `gemini`, `openrouter`, `xai`
   - **embedding:** `openai` **only**
   - **image:** `openai` (gpt-image-1, DALL·E), `gemini` (incl. Nano Banana / Imagen)
-  - **search:** `brave-search`, `serpapi`, `tavily`, `perplexity-sonar`
+  - **search:** `brave-search`, `serpapi`, `tavily`, `perplexity-sonar`, `searxng`, `mcp` (an existing MCP server's search tool — no API key on the provider itself)
   - **tts / stt:** `openai`, `elevenlabs`
   - Plugins add more provider types.
 - **No-key variants:** prefer `anthropic-oauth` / `openai-codex` when the user has a Claude Max / ChatGPT-Codex subscription rather than a pay-per-token API key.
@@ -181,6 +181,6 @@ Symptom → diagnosis → exact fix:
 | "I picked a model but nothing is selected" | A capability has a valid provider but no default (`defaultProviderId:null` / `defaultModels[...].status:"unset"`) | Set it: `set_default_model(service:…, …)` for llm/embedding/image/scout/compacting/extraction; `set_default_provider(capability:…, …)` for search/tts/stt. |
 | "No avatars / images generate" | `capabilityCoverage.image.hasValidProvider:false` | Add an image provider (OpenAI/Gemini) or `enable_provider_capability(... "image")` on an existing one, then `set_default_model(service:"image", …)`. (Map nicknames like "Nano Banana" → Gemini per the section above.) |
 | "Voice doesn't work" (no speech in/out) | `capabilityCoverage.tts.hasValidProvider:false` / `.stt.hasValidProvider:false` | Add a TTS/STT-capable provider with `request_provider_setup`, then `set_default_provider(capability:"tts"|"stt", …)`. Note: voice is not yet wired into channels — be honest about that limit. |
-| "Web search isn't available" | `capabilityCoverage.search.hasValidProvider:false` | Add a search provider (brave-search/tavily/serpapi/perplexity) with `request_provider_setup`, then `set_default_provider(capability:"search", …)`. |
+| "Web search isn't available" | `capabilityCoverage.search.hasValidProvider:false` | Add a search provider (brave-search/tavily/serpapi/perplexity/searxng, or `mcp` pointing at a search tool on an existing MCP server) with `request_provider_setup`, then `set_default_provider(capability:"search", …)`. |
 
 Rules of thumb: a **missing capability degrades gracefully** (only LLM is truly fatal) — frame fixes as upgrades, not failures. A **bad key** is the most common rescue — `get_setup_health` surfaces the `lastError` so you can diagnose it instead of offering to add a brand-new provider. Always re-test after a fix (`test_provider` / `test_channel`) and re-run `get_setup_health` to confirm the issue cleared before telling the user it's resolved.

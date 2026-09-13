@@ -1477,7 +1477,7 @@ export interface SearchResult {
 
 /**
  * Native search provider interface — plugins implement this directly,
- * built-in providers (Brave, SerpAPI, Tavily, Perplexity Sonar) use
+ * built-in providers (Brave, SerpAPI, Tavily, Perplexity Sonar, SearXNG, MCP) use
  * the same shape.
  *
  * Search providers have no `listModels()` (one provider == one search
