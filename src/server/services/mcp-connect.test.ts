@@ -22,6 +22,7 @@ let closeCalls = 0
 let connectCalls = 0
 let callToolCalls: Array<{ name: string; arguments: Record<string, unknown> }> = []
 let failNextCall = false
+let nextCallIsError = false
 
 const mockClient = {
   connect: async () => {
@@ -41,6 +42,10 @@ const mockClient = {
     if (failNextCall) {
       failNextCall = false
       throw new Error('connection reset')
+    }
+    if (nextCallIsError) {
+      nextCallIsError = false
+      return { isError: true, content: [{ type: 'text', text: 'upstream rejected query' }] }
     }
     return { content: [{ type: 'text', text: `echo:${req.arguments.text}` }] }
   },
@@ -134,6 +139,8 @@ const {
   getConnectionStatus,
   resolveMCPTools,
   testConnection,
+  findMcpServerByRef,
+  invokeMcpTool,
 } = await import('./mcp')
 
 beforeEach(async () => {
@@ -147,6 +154,7 @@ beforeEach(async () => {
   connectCalls = 0
   callToolCalls = []
   failNextCall = false
+  nextCallIsError = false
 })
 
 describe('createMcpTransport', () => {
@@ -270,5 +278,30 @@ describe('HTTP connect / listTools / callTool', () => {
     const status = await getConnectionStatus('srv-http')
     expect(status.connected).toBe(false)
     expect(connectCalls).toBe(0)
+  })
+
+  it('findMcpServerByRef matches id and name', async () => {
+    servers = [remoteServer({ id: 'srv-http', name: 'Remote' })]
+    expect((await findMcpServerByRef('srv-http'))?.name).toBe('Remote')
+    expect((await findMcpServerByRef('Remote'))?.id).toBe('srv-http')
+    expect((await findMcpServerByRef('remote'))?.id).toBe('srv-http')
+    expect(await findMcpServerByRef('missing')).toBeUndefined()
+  })
+
+  it('invokeMcpTool forwards to callTool and returns extracted text', async () => {
+    servers = [remoteServer()]
+    const result = await invokeMcpTool('srv-http', 'echo', { text: 'hi' })
+    expect(result).toBe('echo:hi')
+    expect(callToolCalls).toEqual([{ name: 'echo', arguments: { text: 'hi' } }])
+  })
+
+  it('invokeMcpTool throws on CallToolResult.isError without reconnecting', async () => {
+    servers = [remoteServer()]
+    await getConnectionStatus('srv-http')
+    const connectsBefore = connectCalls
+    nextCallIsError = true
+    await expect(invokeMcpTool('srv-http', 'echo', { text: 'nope' }))
+      .rejects.toThrow('upstream rejected query')
+    expect(connectCalls).toBe(connectsBefore)
   })
 })
