@@ -38,10 +38,15 @@ interface MCPConnection {
   serverName: string
 }
 
-interface MCPToolDef {
+export interface MCPToolDef {
   name: string
   description: string
   inputSchema: Record<string, unknown>
+}
+
+/** Application-level tool error (`CallToolResult.isError`), not a transport failure. */
+class McpToolApplicationError extends Error {
+  override name = 'McpToolApplicationError'
 }
 
 // ─── Connection pool (one connection per MCP server) ─────────────────────────
@@ -367,6 +372,88 @@ export async function resolveMCPTools(
 }
 
 
+// ─── Public lookup / invoke (used by the MCP search provider) ────────────────
+
+type McpServerRow = typeof mcpServers.$inferSelect
+
+/**
+ * Resolve an MCP server by id, exact name, case-insensitive name, or
+ * sanitised name (`My Server` ↔ `my_server`). Returns undefined when
+ * nothing matches. Does not connect.
+ */
+export async function findMcpServerByRef(ref: string): Promise<McpServerRow | undefined> {
+  const needle = ref.trim()
+  if (!needle) return undefined
+
+  const servers = await db.select().from(mcpServers).all()
+  const byId = servers.find((s) => s.id === needle)
+  if (byId) return byId
+
+  const exact = servers.find((s) => s.name === needle)
+  if (exact) return exact
+
+  const lower = needle.toLowerCase()
+  const ci = servers.find((s) => s.name.toLowerCase() === lower)
+  if (ci) return ci
+
+  const san = sanitizeName(needle)
+  return servers.find((s) => sanitizeName(s.name) === san)
+}
+
+/**
+ * Tool list from the pooled connection (connects on first use).
+ * Returns null when the server is missing, not active, or cannot connect.
+ */
+export async function listMcpServerTools(serverId: string): Promise<MCPToolDef[] | null> {
+  const conn = await getConnection(serverId)
+  if (!conn) return null
+  return conn.tools
+}
+
+/**
+ * Call a tool on a connected MCP server and return the extracted result.
+ * Throws on connect failure, missing tool, transport error (after one
+ * reconnect), or `CallToolResult.isError`. Reuses the Agent-facing
+ * call path (timeouts, reconnect-once).
+ */
+export async function invokeMcpTool(
+  serverId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const conn = await getConnection(serverId)
+  if (!conn) {
+    throw new Error(`Failed to connect to MCP server ${serverId}`)
+  }
+  const result = await raceWithSignal(callMCPTool(conn, toolName, args), signal)
+  if (isCallFailureEnvelope(result)) {
+    throw new Error(result.error)
+  }
+  return result
+}
+
+async function raceWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise
+  if (signal.aborted) throw new Error('MCP search timed out')
+  let onAbort: (() => void) | undefined
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new Error('MCP search timed out'))
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([promise, aborted])
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort)
+  }
+}
+
+function isCallFailureEnvelope(result: unknown): result is { error: string } {
+  if (!result || typeof result !== 'object') return false
+  const rec = result as Record<string, unknown>
+  return typeof rec.error === 'string' && Object.keys(rec).length === 1
+}
+
 // ─── Call an MCP tool ────────────────────────────────────────────────────────
 
 /** Race a promise against a timeout */
@@ -379,15 +466,54 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ])
 }
 
-/** Extract text content from an MCP call result */
-function extractMCPResult(result: Awaited<ReturnType<Client['callTool']>>): unknown {
+interface McpCallResult {
+  content?: Array<{ type?: string; text?: string }>
+  structuredContent?: unknown
+  isError?: boolean
+}
+
+/** Extract structuredContent when present, otherwise text content. */
+function extractMCPResult(result: McpCallResult): unknown {
+  if (result.structuredContent !== undefined && result.structuredContent !== null) {
+    return result.structuredContent
+  }
   if (result.content && Array.isArray(result.content)) {
     const texts = result.content
-      .filter((c: any) => c.type === 'text')
-      .map((c: any) => c.text)
+      .filter((c) => c.type === 'text')
+      .map((c) => c.text)
+      .filter((t): t is string => typeof t === 'string')
     return texts.length === 1 ? texts[0] : texts.join('\n')
   }
   return result
+}
+
+/**
+ * Interpret a successful RPC. `isError: true` is an application failure
+ * (do NOT treat as a dead connection / reconnect trigger).
+ */
+function interpretCallResult(result: McpCallResult): unknown {
+  const extracted = extractMCPResult(result)
+  if (result.isError) {
+    const message = typeof extracted === 'string' && extracted.trim()
+      ? extracted
+      : 'MCP tool returned an error'
+    throw new McpToolApplicationError(message)
+  }
+  return extracted
+}
+
+async function callMCPToolOnce(
+  conn: MCPConnection,
+  toolName: string,
+  args: Record<string, unknown>,
+  label: string,
+): Promise<unknown> {
+  const result = await withTimeout(
+    conn.client.callTool({ name: toolName, arguments: args }),
+    MCP_CALL_TIMEOUT_MS,
+    label,
+  )
+  return interpretCallResult(result as McpCallResult)
 }
 
 async function callMCPTool(
@@ -396,13 +522,12 @@ async function callMCPTool(
   args: Record<string, unknown>,
 ): Promise<unknown> {
   try {
-    const result = await withTimeout(
-      conn.client.callTool({ name: toolName, arguments: args }),
-      MCP_CALL_TIMEOUT_MS,
-      `MCP tool ${toolName}`,
-    )
-    return extractMCPResult(result)
+    return await callMCPToolOnce(conn, toolName, args, `MCP tool ${toolName}`)
   } catch (err) {
+    if (err instanceof McpToolApplicationError) {
+      return { error: err.message }
+    }
+
     // Connection may be dead, try to reconnect once
     log.warn({ toolName, serverName: conn.serverName, err }, 'MCP tool call failed, attempting reconnection')
     await disconnectServer(conn.serverId)
@@ -410,14 +535,12 @@ async function callMCPTool(
     try {
       const newConn = await connectToServer(conn.serverId)
       if (newConn) {
-        const retryResult = await withTimeout(
-          newConn.client.callTool({ name: toolName, arguments: args }),
-          MCP_CALL_TIMEOUT_MS,
-          `MCP tool ${toolName} (retry)`,
-        )
-        return extractMCPResult(retryResult)
+        return await callMCPToolOnce(newConn, toolName, args, `MCP tool ${toolName} (retry)`)
       }
     } catch (retryErr) {
+      if (retryErr instanceof McpToolApplicationError) {
+        return { error: retryErr.message }
+      }
       log.error({ toolName, serverName: conn.serverName, retryErr }, 'MCP tool call retry also failed')
     }
 
@@ -476,6 +599,11 @@ function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodType {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Sanitise a server or tool name the same way grant names are built. */
+export function sanitizeMcpName(name: string): string {
+  return sanitizeName(name)
+}
 
 function sanitizeName(name: string): string {
   // First try: transliterate common accented chars, then strip non-ascii
