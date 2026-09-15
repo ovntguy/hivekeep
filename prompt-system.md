@@ -70,6 +70,7 @@ Each block below is tagged `[stable]` or `[volatile]` exactly as the code segmen
 |---|---|---|---|---|
 | 1 | `## Platform context` (`[0]`) | stable | hardcoded | continuous session, multi-user, queue model |
 | 2 | `You are {name} (slug: {slug}), {role}.` (`[1]`) | stable | `agent.name/slug/role` | identity line |
+| 2b | `## Environment` (+ `## Windows CLI` on win32) | stable | `systemContext{}` / `getSystemContext()` | platform, arch, default `run_shell` interpreter, available CLIs; on Windows 11, a baked-in PowerShell/cmd knowledge block (`windows-cli-knowledge.md`) so every Agent treats Windows tools as the default CLI |
 | 3 | `## Core principles` (`[1.5]`) | stable | hardcoded | universal baseline behaviors |
 | 4 | `## Tool calling discipline` (`[1.6]`) | stable | hardcoded, gated on `toolsEnabled` | intent-sentence-only-before-results rule + anti simulated-interleaving + concrete anti-patterns + image-embedding sub-block |
 | 5 | `## Personality` (`[2]`) | stable | `agent.character` (if set) | injected verbatim, no translation |
@@ -100,7 +101,7 @@ Each block below is tagged `[stable]` or `[volatile]` exactly as the code segmen
 |---|---|---|---|---|
 | 1 | `You are {name}, a specialized AI agent on Hivekeep, executing a delegated task.` | stable | `agent.name` | + one line on what Hivekeep is |
 | 2 | `## Your mission` | stable | `taskDescription` | |
-| 3 | `## Environment` | stable | `systemContext{}` | platform/arch/available CLIs + workspace cwd; saves probe calls |
+| 3 | `## Environment` (+ `## Windows CLI` on win32) | stable | `systemContext{}` | platform/arch/default shell/available CLIs + workspace cwd; Windows hosts get PowerShell-first CLI knowledge so delegated tasks do not emit bash |
 | 4 | `## Constraints` + `## Tool calling discipline` + `## Execution discipline` + `## CRITICAL - Task resolution` | stable | hardcoded | cron-journal addendum when it's a cron task |
 | 5 | `## Previous runs` | stable | `previousCronRuns[]` | cron continuity (newest first) |
 | 6 | `## Learnings from previous runs` | stable | `cronLearnings[]` | accumulated lessons |
@@ -112,7 +113,7 @@ Each block below is tagged `[stable]` or `[volatile]` exactly as the code segmen
 | 13 | `## Context` | volatile | `buildContextBlock()` | |
 | 14 | `## Final reminder (this turn)` | volatile | hardcoded | execution-efficiency variant (don't re-read, fan out, no shell wrappers, no safety bypass) |
 
-> The sub-Agent shape skips: `## Platform context`, `## Core principles`, `## Personality`, `## Expertise`, the main-agent `## Internal instructions` mega-block, and the `## MCP Tools` / `## External channels` summaries. Its discipline blocks are inlined into the `## Constraints` group instead.
+> The sub-Agent shape skips: `## Platform context`, `## Core principles`, `## Personality`, `## Expertise`, the main-agent `## Internal instructions` mega-block, and the `## MCP Tools` / `## External channels` summaries. Its discipline blocks are inlined into the `## Constraints` group instead. **It does include `## Environment`** (same block as the main Agent).
 
 ### C. Quick session prompt (prompt-builder.ts:1166–1200)
 

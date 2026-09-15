@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, resolve } from 'path'
 import os from 'os'
 import { parseModelEnv } from '@/shared/model-ref'
+import { defaultTerminalShellBinary } from '@/server/services/host-platform'
 
 const dataDir = process.env.HIVEKEEP_DATA_DIR ?? './data'
 
@@ -567,8 +568,9 @@ export const config = {
   terminal: {
     /** Kill-switch: set HIVEKEEP_TERMINAL_ENABLED=false to disable the feature entirely. */
     enabled: process.env.HIVEKEEP_TERMINAL_ENABLED !== 'false',
-    /** Shell binary spawned for each session. Defaults to $SHELL, then /bin/bash. */
-    shell: process.env.HIVEKEEP_TERMINAL_SHELL ?? process.env.SHELL ?? '/bin/bash',
+    /** Shell binary spawned for each session. Defaults to $SHELL, then
+     *  PowerShell on Windows 11, `/bin/bash` elsewhere. */
+    shell: process.env.HIVEKEEP_TERMINAL_SHELL ?? defaultTerminalShellBinary(),
     /** Scrollback kept server-side per session, replayed on reattach (KB). */
     scrollbackKb: Number(process.env.HIVEKEEP_TERMINAL_SCROLLBACK_KB ?? 256),
     /** How long a detached session (no client connected) survives before the

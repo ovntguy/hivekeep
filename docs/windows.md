@@ -285,6 +285,15 @@ Stop the other process, or set `PORT=3001` (and matching `PUBLIC_URL`) in `.env`
 
 First start prints that it generated `ENCRYPTION_KEY` in the data directory. If you later point `HIVEKEEP_DATA_DIR` at an empty folder, Hivekeep mints a **new** key and cannot decrypt the old vault. Keep data dir + `.encryption-key` together.
 
+## Agent command line (Windows-first)
+
+Every Agent sees an **Environment** block that this host is Windows 11 and that **`run_shell` defaults to PowerShell** (`pwsh` when installed, otherwise Windows PowerShell 5.1). File reads still go through `read_file` / `grep` / `list_directory`, not `Get-Content` / `Select-String`.
+
+- Optional `shell` on `run_shell`: `powershell` | `pwsh` | `cmd` | `bash` (Git Bash).
+- Built-in **`windows` toolbox**: host diagnostics (`get_system_info`), `http_request`, and web docs around that core shell. Grant it to Windows-ops specialists; do not assign it to every Agent just to "get a command line" — that is already on the core floor.
+- PATH for spawned commands is augmented with `%USERPROFILE%\.bun\bin`, Git for Windows, WinGet links, and `HIVEKEEP_AUGMENT_PATH` (semicolon-separated on Windows).
+- In-app Terminal defaults to PowerShell as well (`HIVEKEEP_TERMINAL_SHELL` to override).
+
 ## MCP servers on Windows
 
 **Remote HTTP MCP** (Settings → MCP Servers → Remote URL) is the path that does not need a local Node toolchain, `npx`, WSL, or Docker. Hivekeep connects with the official Streamable HTTP transport (or legacy SSE). See [MCP](../docs-site/src/content/docs/features/mcp.md) and [docs/mcp-http.md](mcp-http.md).

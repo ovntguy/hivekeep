@@ -45,7 +45,7 @@ if (schemaIsReal) {
 const svc = schemaIsReal
   ? await import('@/server/services/toolboxes')
   : ({} as typeof import('@/server/services/toolboxes'))
-const { resolveToolboxNames, createToolbox } =
+const { resolveToolboxNames, createToolbox, BUILTIN_TOOLBOXES } =
   svc as typeof import('@/server/services/toolboxes')
 
 const itReal = schemaIsReal ? it : it.skip
@@ -121,6 +121,24 @@ function insertCustomTool(slug: string, enabled: boolean): void {
     [uuid(), slug, slug, `desc ${slug}`, '{}', 'main.ts', enabled ? 1 : 0, now, now],
   )
 }
+
+describe('BUILTIN_TOOLBOXES', () => {
+  it('includes a windows toolbox around host diagnostics, not CORE file/shell tools', () => {
+    if (!schemaIsReal) return
+    const win = BUILTIN_TOOLBOXES.find((b) => b.name === 'windows')
+    expect(win).toBeDefined()
+    expect(win!.toolNames).toEqual(expect.arrayContaining([
+      'get_system_info',
+      'http_request',
+      'web_search',
+      'browse_url',
+      'scout',
+    ]))
+    expect(win!.toolNames).not.toContain('run_shell')
+    expect(win!.toolNames).not.toContain('read_file')
+    expect(win!.toolNames).not.toContain('grep')
+  })
+})
 
 describe('resolveToolboxNames — "*" wildcard', () => {
   itReal('expands "*" to native tools + ENABLED custom tools, excluding disabled customs and plugins', () => {
