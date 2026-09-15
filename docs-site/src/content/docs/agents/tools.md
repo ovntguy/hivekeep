@@ -247,19 +247,19 @@ These tools operate on the Agent's **workspace**, a per-Agent directory on your 
 :::tip[Tool selection guidance]
 The system prompt includes a tool selection table that steers Agents toward structured file tools over `run_shell`:
 
-- **Search file contents** → `grep` (not `run_shell` with grep/rg)
-- **Find files by pattern** → `list_directory` with pattern (not `run_shell` with find/ls)
+- **Search file contents** → `grep` (not `run_shell` with grep/rg/Select-String)
+- **Find files by pattern** → `list_directory` with pattern (not `run_shell` with find/ls/Get-ChildItem)
 - **Single text replacement** → `edit_file` (not `run_shell` with sed/awk)
 - **Replace all occurrences** → `edit_file` with `replaceAll=true`
 - **Multiple edits, same file** → `multi_edit` (not sequential `edit_file` calls)
-- **Git, builds, tests** → `run_shell`
+- **Git, builds, tests, OS admin** → `run_shell` (PowerShell by default on Windows; bash on Linux/macOS)
 :::
 
 ### System & Advanced
 
 | Tool | Description |
 |---|---|
-| `run_shell` | Execute a shell command (main + sub-agent) |
+| `run_shell` | Execute a command (main + sub-agent). On Windows 11 the default interpreter is PowerShell (`pwsh` if installed, else Windows PowerShell 5.1); pass `shell` (`powershell` / `pwsh` / `cmd` / `bash`) to override. On Linux/macOS the default is bash. |
 | `http_request` | Make HTTP requests to external APIs |
 | `get_platform_config` | Read current Hivekeep configuration (sensitive values redacted) |
 | `get_platform_logs` | View Hivekeep platform logs (dangerous; grant via toolbox) |
