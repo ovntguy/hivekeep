@@ -10,6 +10,7 @@ import { listAvailableAgents } from '@/server/services/inter-agent'
 import { getMCPToolsSummary } from '@/server/services/mcp'
 import { toolRegistry } from '@/server/tools/index'
 import { getGlobalPrompt } from '@/server/services/app-settings'
+import { getSystemContext } from '@/server/services/system-context'
 import { fetchPreviousCronRuns } from '@/server/services/tasks'
 import { fetchCronLearnings } from '@/server/services/cron-learnings'
 import { getActiveChannelsForAgent } from '@/server/services/channels'
@@ -444,6 +445,7 @@ export async function buildContextPreview(agentId: string): Promise<ContextPrevi
       hasCompactedHistory,
     },
     workspacePath: agent.workspacePath,
+    systemContext: getSystemContext(),
   }))
 
   // Resolve tools — unified resolver (toolbox is the sole grant primitive
@@ -752,6 +754,7 @@ export async function buildTaskContextPreview(taskId: string): Promise<ContextPr
     globalPrompt,
     userLanguage: 'en',
     workspacePath: agentIdentity.workspacePath,
+    systemContext: getSystemContext(),
   }))
 
   // Messages: only this task's messages
@@ -887,6 +890,7 @@ export async function buildQuickSessionContextPreview(agentId: string, sessionId
     globalPrompt,
     userLanguage,
     workspacePath: agent.workspacePath,
+    systemContext: getSystemContext(),
   }))
 
   // Messages: only this session

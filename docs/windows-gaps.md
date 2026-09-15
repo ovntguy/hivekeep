@@ -30,7 +30,7 @@ These scripts and docs were **not** executed on the physical Windows 11 PC that 
 |---|---|
 | Visual Studio Build Tools | A Win11 run completed **without** VS Build Tools / `vswhere`. Other machines may still fail `node-gyp` while compiling **`better-sqlite3`** (or another addon). Install the C++ Build Tools workload if `bun install` errors on compile. Runtime I/O is **bun:sqlite**, not better-sqlite3. |
 | `sqlite-vec` | Prebuilds usually load via `getLoadablePath()`. If `loadExtension` throws, the server **keeps running** and logs that vector search is disabled. FTS5 still works. |
-| `bun-pty` | In-app **Terminal** (`src/server/services/terminal-sessions.ts`) uses `bun-pty` and defaults to `/bin/bash`. Native Win11 PTY / `cmd.exe` / PowerShell behavior is **unproven**. Disable with `HIVEKEEP_TERMINAL_ENABLED=false` if it misbehaves. |
+| `bun-pty` | In-app **Terminal** defaults to PowerShell on native Win11 (`pwsh` / `powershell.exe`, override with `HIVEKEEP_TERMINAL_SHELL`). PTY behavior is still **less proven** than Linux. Disable with `HIVEKEEP_TERMINAL_ENABLED=false` if it misbehaves. |
 | Other native extras | Channel stacks (for example WhatsApp Web / Signal) may pull extra optional binaries. Not required for first boot. |
 
 ## Playwright (optional / feature gap)
@@ -45,7 +45,7 @@ These scripts and docs were **not** executed on the physical Windows 11 PC that 
 
 | Gap | Detail |
 |---|---|
-| PATH for Agent `run_shell` | Server `PATH` augmentation in `src/server/services/system-context.ts` is colon-separated and Unix-home oriented. Windows Agents may not see the same extra bins. |
+| PATH for Agent `run_shell` | On Windows, `run_shell` defaults to PowerShell (`pwsh` or `powershell.exe`) with an optional `shell` argument (`powershell` / `pwsh` / `cmd` / `bash`). PATH augmentation uses `;` and well-known Windows bin dirs (`%USERPROFILE%\.bun\bin`, Git for Windows, WinGet links, …). Every Agent's Environment prompt includes Windows CLI knowledge. The built-in `windows` toolbox adds host diagnostics (`get_system_info`) and lookup around that core shell. |
 | `HOST=127.0.0.1` | Same as `.env.example`. LAN access needs `0.0.0.0` and a matching `PUBLIC_URL`. |
 | Cron timezone | Set `HIVEKEEP_TIMEZONE` to an IANA name (`America/Chicago`). Windows display names are not mapped automatically. |
 | Contributor pre-commit | Relies on `sh` + Bun on PATH. Fine in Git Bash; not required to **run** Hivekeep. |

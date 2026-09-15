@@ -48,9 +48,10 @@ Hivekeep seeds these built-in toolboxes idempotently at startup. They are kept i
 | `email` | Email account access: list, read, search, send, and download attachments through connected accounts. |
 | `calendar` | Calendar access (Google, Outlook, CalDAV): list and search events, create, update, delete. |
 | `address-book` | Read-only access to **external** address books (iCloud, ...), distinct from Hivekeep's own contacts. |
+| `windows` | Windows 11 host operations: `get_system_info`, `http_request`, `web_search`, `browse_url`, `extract_links`, `screenshot_url`, and `scout`. Command line itself is the core `run_shell` tool (PowerShell by default on Windows). Grant to Agents that administer the Windows machine. |
 | `configurator` | The configuration toolbox used by [Queenie](/docs/features/queenie/). See below. |
 
-The `code`, `research`, and `ops` toolboxes all include the `scout` tool so an Agent can offload heavy read-only exploration to a cheaper model. See [Scout](/docs/features/scout/) for how that delegation works.
+The `code`, `research`, `ops`, and `windows` toolboxes all include the `scout` tool so an Agent can offload heavy read-only exploration to a cheaper model. See [Scout](/docs/features/scout/) for how that delegation works.
 
 ### The configurator toolbox
 
