@@ -1006,13 +1006,23 @@
     },
     "regenerate": "Régénérer",
     "toolsBadge": {
+      "label": "{{granted}}/{{max}}",
       "tooltip_one": "{{count}} outil disponible - cliquez pour le lister",
-      "tooltip_other": "{{count}} outils disponibles - cliquez pour les lister"
+      "tooltip_other": "{{count}} outils disponibles - cliquez pour les lister",
+      "tooltipWithMax_one": "{{count}} outil sur {{max}} acceptés par ce modèle - cliquez pour le lister",
+      "tooltipWithMax_other": "{{count}} outils sur {{max}} acceptés par ce modèle - cliquez pour les lister",
+      "tooltipOverCap_one": "{{count}} accordé, ce modèle n'accepte que {{max}} par tour (le surplus est ignoré) - cliquez pour le lister",
+      "tooltipOverCap_other": "{{count}} accordés, ce modèle n'accepte que {{max}} par tour (le surplus est ignoré) - cliquez pour les lister",
+      "tooltipUnsupported_one": "{{count}} outil accordé mais ce modèle ne peut pas appeler d'outils - cliquez pour le lister",
+      "tooltipUnsupported_other": "{{count}} outils accordés mais ce modèle ne peut pas appeler d'outils - cliquez pour les lister"
     },
     "toolsModal": {
       "title": "{{name}} - outils",
       "description": "Tous les outils actuellement exposés à cet agent, groupés par domaine.",
       "descriptionQuick": "Outils exposés dans cette session rapide. Les outils restreints en session (tâches, crons, messagerie inter-agents) sont exclus.",
+      "capHint": "Ce modèle accepte {{max}} outils par tour.",
+      "capOver": "{{granted}} accordés ; le surplus au-delà de {{max}} est ignoré à chaque tour.",
+      "capUnsupported": "Ce modèle ne peut pas appeler d'outils, donc aucun n'est envoyé.",
       "edit": "Modifier les outils"
     },
     "mobileInfo": {
@@ -2613,7 +2623,10 @@
     "loading": "Chargement des modèles…",
     "vision": "vision",
     "img2img": "img2img",
-    "multiImage": "multi-réf ({{count}})"
+    "multiImage": "multi-réf ({{count}})",
+    "maxTools_one": "{{count}} outil",
+    "maxTools_other": "{{count}} outils",
+    "noToolCalls": "aucun outil"
   },
   "account": {
     "title": "Mon compte",
