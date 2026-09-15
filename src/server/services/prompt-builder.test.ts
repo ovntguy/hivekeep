@@ -197,6 +197,8 @@ describe('buildSystemPrompt', () => {
     const result = buildSystemPrompt(makeParams())
     expect(result).toContain('Current date:')
     expect(result).toContain('Platform: Hivekeep')
+    expect(result).toContain('do not web_search to look them up')
+    expect(result).toContain("Do not web_search for today's date or time")
   })
 
   // --- Initiative ---
