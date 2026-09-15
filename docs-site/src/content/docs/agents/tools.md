@@ -307,6 +307,8 @@ Per-invocation timeout values passed by the Agent are clamped between 1 second a
 
 ## Tool configuration
 
+The chat composer tools badge shows **granted / max** for the selected model (for example `48/128` on OpenAI, `48/512` on Anthropic). The cap is the same number the engine uses: a per-model override when the catalogue declares one, otherwise the provider default (`128` for OpenAI-family, `512` for Anthropic, `0` when the model cannot call tools). Granting more than the cap still lists every tool in the badge modal; extras are dropped on each turn.
+
 Tool access is governed by **toolboxes**: the single tool-grant primitive for both main Agents and tasks, across all four tool sources (native, plugin, MCP, custom). There is no per-Agent deny-list, no MCP access gate, and no capability flags.
 
 Each Agent (and each task/cron) references an array of toolbox ids:

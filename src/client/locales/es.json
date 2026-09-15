@@ -1006,13 +1006,23 @@
     },
     "regenerate": "Regenerar",
     "toolsBadge": {
+      "label": "{{granted}}/{{max}}",
       "tooltip_one": "{{count}} herramienta disponible, haz clic para listarla",
-      "tooltip_other": "{{count}} herramientas disponibles, haz clic para listarlas"
+      "tooltip_other": "{{count}} herramientas disponibles, haz clic para listarlas",
+      "tooltipWithMax_one": "{{count}} de {{max}} herramientas que acepta este modelo - clic para listarla",
+      "tooltipWithMax_other": "{{count}} de {{max}} herramientas que acepta este modelo - clic para listarlas",
+      "tooltipOverCap_one": "{{count}} concedida; este modelo solo acepta {{max}} por turno (el resto se descarta) - clic para listarla",
+      "tooltipOverCap_other": "{{count}} concedidas; este modelo solo acepta {{max}} por turno (el resto se descarta) - clic para listarlas",
+      "tooltipUnsupported_one": "{{count}} herramienta concedida pero este modelo no puede llamar herramientas - clic para listarla",
+      "tooltipUnsupported_other": "{{count}} herramientas concedidas pero este modelo no puede llamar herramientas - clic para listarlas"
     },
     "toolsModal": {
       "title": "{{name}}: herramientas",
       "description": "Todas las herramientas expuestas actualmente a este agente, agrupadas por dominio.",
       "descriptionQuick": "Herramientas expuestas en esta sesión rápida (se excluyen las restringidas por sesión, como tareas, crons y mensajería entre agentes).",
+      "capHint": "Este modelo acepta {{max}} herramientas por turno.",
+      "capOver": "{{granted}} concedidas; lo que exceda {{max}} se descarta en cada turno.",
+      "capUnsupported": "Este modelo no puede llamar herramientas, así que no se envía ninguna.",
       "edit": "Editar herramientas"
     },
     "mobileInfo": {
@@ -2613,7 +2623,10 @@
     "loading": "Cargando modelos…",
     "vision": "visión",
     "img2img": "img2img",
-    "multiImage": "multi-ref ({{count}})"
+    "multiImage": "multi-ref ({{count}})",
+    "maxTools_one": "{{count}} herramienta",
+    "maxTools_other": "{{count}} herramientas",
+    "noToolCalls": "sin herramientas"
   },
   "account": {
     "title": "Mi cuenta",

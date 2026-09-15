@@ -18,6 +18,7 @@ import {
 } from '@/server/services/provider-config'
 import { getLLMProvider } from '@/server/llm/llm/registry'
 import { enrichModel } from '@/server/llm/metadata/enrich'
+import { getMaxToolsForRequest } from '@/server/services/tool-cap'
 import { listRegistryByProvider, reconcileProvider } from '@/server/services/model-registry'
 import { config } from '@/server/config'
 import { getEmbeddingProvider } from '@/server/llm/embedding/registry'
@@ -490,6 +491,10 @@ providerRoutes.get('/models', async (c) => {
      *  Absent = not a reasoning model (or unknown); `efforts: []` = reasoning
      *  toggle-only (no granularity). Drives the effort selectors client-side. */
     thinking?: { efforts: string[]; note?: string }
+    /** LLM-family only — effective tool cap for one request
+     *  (`model.maxTools ?? provider.defaultMaxTools ?? 128`). `0` means
+     *  the model cannot call tools. Drives the composer tools badge. */
+    maxTools?: number
   }
 
   const allProviders = await db.select().from(providers).all()
@@ -540,6 +545,9 @@ providerRoutes.get('/models', async (c) => {
               ...(m.capability === 'image' ? { maxImageInputs: m.maxImageInputs ?? 0 } : {}),
               ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
               ...(m.maxOutput != null ? { maxOutput: m.maxOutput } : {}),
+              ...(enriched
+                ? { maxTools: getMaxToolsForRequest(p.type, enriched) }
+                : {}),
             })
           }
         }

@@ -1016,15 +1016,31 @@
     },
     "regenerate": "Wygeneruj ponownie",
     "toolsBadge": {
+      "label": "{{granted}}/{{max}}",
       "tooltip_one": "{{count}} dostępne narzędzie, kliknij, aby je wyświetlić",
       "tooltip_few": "{{count}} dostępne narzędzia, kliknij, aby je wyświetlić",
       "tooltip_many": "{{count}} dostępnych narzędzi, kliknij, aby je wyświetlić",
-      "tooltip_other": "{{count}} dostępnego narzędzia, kliknij, aby je wyświetlić"
+      "tooltip_other": "{{count}} dostępnego narzędzia, kliknij, aby je wyświetlić",
+      "tooltipWithMax_one": "{{count}} z {{max}} narzędzi akceptowanych przez ten model, kliknij, aby je wyświetlić",
+      "tooltipWithMax_few": "{{count}} z {{max}} narzędzi akceptowanych przez ten model, kliknij, aby je wyświetlić",
+      "tooltipWithMax_many": "{{count}} z {{max}} narzędzi akceptowanych przez ten model, kliknij, aby je wyświetlić",
+      "tooltipWithMax_other": "{{count}} z {{max}} narzędzi akceptowanych przez ten model, kliknij, aby je wyświetlić",
+      "tooltipOverCap_one": "Przyznano {{count}}; model przyjmuje tylko {{max}} na turę (nadwyżka jest odrzucana), kliknij, aby wyświetlić",
+      "tooltipOverCap_few": "Przyznano {{count}}; model przyjmuje tylko {{max}} na turę (nadwyżka jest odrzucana), kliknij, aby wyświetlić",
+      "tooltipOverCap_many": "Przyznano {{count}}; model przyjmuje tylko {{max}} na turę (nadwyżka jest odrzucana), kliknij, aby wyświetlić",
+      "tooltipOverCap_other": "Przyznano {{count}}; model przyjmuje tylko {{max}} na turę (nadwyżka jest odrzucana), kliknij, aby wyświetlić",
+      "tooltipUnsupported_one": "Przyznano {{count}} narzędzie, ale ten model nie wywołuje narzędzi, kliknij, aby wyświetlić",
+      "tooltipUnsupported_few": "Przyznano {{count}} narzędzia, ale ten model nie wywołuje narzędzi, kliknij, aby wyświetlić",
+      "tooltipUnsupported_many": "Przyznano {{count}} narzędzi, ale ten model nie wywołuje narzędzi, kliknij, aby wyświetlić",
+      "tooltipUnsupported_other": "Przyznano {{count}} narzędzia, ale ten model nie wywołuje narzędzi, kliknij, aby wyświetlić"
     },
     "toolsModal": {
       "title": "{{name}}: narzędzia",
       "description": "Wszystkie narzędzia obecnie dostępne dla tego agenta, pogrupowane według domen.",
       "descriptionQuick": "Narzędzia dostępne w tej szybkiej sesji (narzędzia ograniczone do sesji, takie jak zadania, crony i komunikacja między Agentami, są wykluczone).",
+      "capHint": "Ten model przyjmuje {{max}} narzędzi na turę.",
+      "capOver": "Przyznano {{granted}}; nadwyżka ponad {{max}} jest odrzucana w każdej turze.",
+      "capUnsupported": "Ten model nie wywołuje narzędzi, więc żadne nie są wysyłane.",
       "edit": "Edytuj narzędzia"
     },
     "mobileInfo": {
@@ -2631,7 +2647,12 @@
     "loading": "Wczytywanie modeli…",
     "vision": "vision",
     "img2img": "img2img",
-    "multiImage": "multi-ref ({{count}})"
+    "multiImage": "multi-ref ({{count}})",
+    "maxTools_one": "{{count}} narzędzie",
+    "maxTools_few": "{{count}} narzędzia",
+    "maxTools_many": "{{count}} narzędzi",
+    "maxTools_other": "{{count}} narzędzia",
+    "noToolCalls": "brak narzędzi"
   },
   "account": {
     "title": "Moje konto",

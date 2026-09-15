@@ -8,6 +8,7 @@ import { MessageInput, type MessageInputHandle } from '@/client/components/chat/
 import { AgentToolsModal } from '@/client/components/agent/AgentToolsModal'
 import { FeedbackBanner } from '@/client/components/feedback/FeedbackBanner'
 import { useAgentTools } from '@/client/hooks/useAgentTools'
+import { listedModelMaxTools } from '@/client/lib/model-max-tools'
 import { TypingIndicator } from '@/client/components/chat/TypingIndicator'
 import { ConversationHeader } from '@/client/components/chat/ConversationHeader'
 import { ToolCallsViewer } from '@/client/components/chat/ToolCallsViewer'
@@ -75,6 +76,7 @@ interface LLMModel {
   providerName: string
   providerType: string
   capability: string
+  maxTools?: number
 }
 
 interface ChatPanelProps {
@@ -122,6 +124,7 @@ export function ChatPanel({ agent, llmModels, modelUnavailable = false, queueSta
   const [rewindTarget, setRewindTarget] = useState<string | null>(null)
   // Tools badge: the agent's resolved toolset + its listing modal.
   const { tools: agentTools, count: agentToolCount, refetch: refetchAgentTools } = useAgentTools(agent.id)
+  const maxTools = listedModelMaxTools(llmModels, agent.model, agent.providerId)
   const [toolsModalOpen, setToolsModalOpen] = useState(false)
   const { openTask } = useSidePanel()
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
@@ -1341,6 +1344,7 @@ export function ChatPanel({ agent, llmModels, modelUnavailable = false, queueSta
         thinkingEffort={thinkingEffort}
         onChangeThinking={updateThinking}
         toolCount={agentToolCount}
+        maxTools={maxTools}
         onShowTools={() => { void refetchAgentTools(); setToolsModalOpen(true) }}
       />
 
@@ -1353,6 +1357,7 @@ export function ChatPanel({ agent, llmModels, modelUnavailable = false, queueSta
           agentId={agent.id}
           agentName={agent.name}
           tools={agentTools}
+          maxTools={maxTools}
           onEditTools={() => onEditAgent({ initialTab: 'tools' })}
         />
       )}

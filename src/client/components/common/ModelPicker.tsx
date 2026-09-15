@@ -34,6 +34,8 @@ interface ModelPickerModel {
   supportsImageInput?: boolean
   /** Image-family only — how many source images this model accepts. */
   maxImageInputs?: number
+  /** LLM-family only — effective tools-per-request cap. */
+  maxTools?: number
 }
 
 /** Compact tokens display: 1_500_000 -> "1.5M", 128_000 -> "128k". */
@@ -244,7 +246,8 @@ export function ModelPicker({
                       m.contextWindow != null ||
                       m.maxOutput != null ||
                       m.supportsImageInput ||
-                      (m.maxImageInputs != null && m.maxImageInputs > 0)
+                      (m.maxImageInputs != null && m.maxImageInputs > 0) ||
+                      m.maxTools != null
                     return (
                       <CommandItem
                         key={itemValue}
@@ -292,6 +295,13 @@ export function ModelPicker({
                                   {m.maxImageInputs === 1
                                     ? t('modelPicker.img2img')
                                     : t('modelPicker.multiImage', { count: m.maxImageInputs })}
+                                </Badge>
+                              )}
+                              {m.maxTools != null && (
+                                <Badge variant="outline" size="xs">
+                                  {m.maxTools === 0
+                                    ? t('modelPicker.noToolCalls')
+                                    : t('modelPicker.maxTools', { count: m.maxTools })}
                                 </Badge>
                               )}
                             </div>
