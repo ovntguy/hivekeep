@@ -238,6 +238,7 @@ function buildContextBlock(): string {
     `Current time: ${time} (${tz})\n` +
     `ISO timestamp: ${iso}\n` +
     `Timezone: ${tz} — interpret schedules and wall-clock times in this zone unless the user asks otherwise\n` +
+    `Wall-clock date and time above are authoritative — do not web_search to look them up.\n` +
     `Platform: Hivekeep v${config.version}\n` +
     `Installation: ${installLine}${envFileLine}\n` +
     `Data directory: ${config.dataDir}\n` +
@@ -815,7 +816,7 @@ export function buildSystemPrompt(params: PromptParams): BuiltSystemPrompt {
       `- Use store_file() to create shareable files. Always share the URL with the user after.\n` +
       `- Check list_stored_files() before creating duplicates.\n\n` +
       `### Tool usage strategy\n` +
-      `- Use web_search() for current information, then browse_url() for full content.\n` +
+      `- Use web_search() for current events and facts you do not already have, then browse_url() for full content. Do not web_search for today's date or time; Context already lists them.\n` +
       `- Delegate heavy tasks to spawn_self()/spawn_agent() to avoid blocking the queue.\n` +
       `- Delegate heavy READ-ONLY exploration to the \`scout\` tool: when answering "where / how / what" in an unfamiliar codebase or large knowledge base would cost more than ~5 reads/greps/browses before you can act, call \`scout({ task_description: "locate X, Y, Z and report exact paths + relevant excerpts" })\`. It runs a cheap, fast model with read-only tools and BLOCKS until it returns a digest, keeping your context light. Skip it only for trivial lookups (1-3 items you can name).\n` +
       `- Use store_file() for substantial content instead of long chat messages.\n\n` +

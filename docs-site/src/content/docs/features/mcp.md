@@ -136,6 +136,10 @@ Parallel's hosted `web_search` tool has no `q` field. It requires `objective` (s
 
 `web_search` then sends `{ objective: "<query>", search_queries: ["<query>"] }`. Result `excerpts[]` become snippets.
 
+Do **not** smoke-test with `query: "current date"`. Search engines treat that as keywords (SQL `GETDATE()` docs, a news headline that happens to say "current date"), not the calendar. Hivekeep already injects wall-clock date and time every turn. Use a specific topic (`Hivekeep self-hosted agents`) to verify the pipeline.
+
+Do **not** add a second "proxy" MCP to rerank or rewrite those hits. A proxy cannot turn a keyword query into today's date; it adds latency and another failure point. To read a result in depth, call `browse_url` (or the search server's own fetch tool, granted on a toolbox). To get a synthesized paragraph with citations, pick a search provider that declares `supportsAnswer` (Tavily, Perplexity) instead of wrapping MCP.
+
 ### Auth
 
 The MCP search provider has **no API key**. Auth stays where it already lives:

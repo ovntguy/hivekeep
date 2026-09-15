@@ -153,7 +153,7 @@ The trailing guidance states the profile-vs-archive test verbatim: *should this 
 
 ### [8] Context: `buildContextBlock` (volatile)
 
-Rebuilt every turn. Emits: current date (weekday + full date), current time + timezone, ISO timestamp, a timezone-interpretation note, `Platform: Hivekeep v{config.version}`, installation type (Docker / systemd-user / systemd-system / manual, with user and config-file path when known), data directory, public URL, and a live system line (`{platform} {release} ({arch}) | Uptime: … | RAM: used/total GB`). All wall-clock times render in `config.timezone`.
+Rebuilt every turn. Emits: current date (weekday + full date), current time + timezone, ISO timestamp, a timezone-interpretation note, an instruction **not** to `web_search` for that wall-clock date/time, `Platform: Hivekeep v{config.version}`, installation type (Docker / systemd-user / systemd-system / manual, with user and config-file path when known), data directory, public URL, and a live system line (`{platform} {release} ({arch}) | Uptime: … | RAM: used/total GB`). All wall-clock times render in `config.timezone`.
 
 ### [9] Conversation history summaries (volatile)
 
