@@ -4,12 +4,31 @@ import type { MCPToolDef } from '@/server/services/mcp'
 import {
   qualifyMcpSearchTool,
   resolveQueryArg,
+  wrapQueryAsSearchQueries,
   mapSearchRequestToToolArgs,
   matchMcpTool,
   parseMcpSearchOutput,
   mcpSearchProvider,
   mcpSearchRuntime,
 } from './mcp'
+
+/** Parallel Search MCP `web_search` — no `q`/`query`, requires objective + search_queries. */
+const parallelSchema = {
+  type: 'object',
+  properties: {
+    objective: {
+      type: 'string',
+      description: 'Natural-language research goal',
+    },
+    search_queries: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 1,
+      description: 'Keyword queries',
+    },
+  },
+  required: ['objective', 'search_queries'],
+}
 
 type ServerRow = {
   id: string
@@ -95,6 +114,39 @@ describe('resolveQueryArg', () => {
     expect(resolveQueryArg(schema)).toBeUndefined()
     expect(resolveQueryArg(schema, 'topic')).toBe('topic')
   })
+
+  it('picks objective when the tool has no q/query (Parallel Search MCP)', () => {
+    expect(resolveQueryArg(parallelSchema)).toBe('objective')
+  })
+
+  it('falls back to search_queries when that is the only query-like field', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        search_queries: { type: 'array', items: { type: 'string' } },
+        mode: { type: 'string' },
+      },
+      required: ['search_queries'],
+    }
+    expect(resolveQueryArg(schema)).toBe('search_queries')
+  })
+})
+
+describe('wrapQueryAsSearchQueries', () => {
+  it('wraps the query in a one-element array by default', () => {
+    expect(wrapQueryAsSearchQueries({ type: 'array', items: { type: 'string' } }, 'cats')).toEqual(['cats'])
+  })
+
+  it('pads to minItems and caps at maxItems / 6', () => {
+    expect(wrapQueryAsSearchQueries(
+      { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 3 },
+      'cats',
+    )).toEqual(['cats', 'cats', 'cats'])
+    expect(wrapQueryAsSearchQueries(
+      { type: 'array', items: { type: 'string' }, minItems: 20 },
+      'cats',
+    )).toHaveLength(6)
+  })
 })
 
 describe('qualifyMcpSearchTool', () => {
@@ -162,6 +214,20 @@ describe('qualifyMcpSearchTool', () => {
       required: ['q', 'max_results'],
     }
     expect(qualifyMcpSearchTool(schema)).toMatchObject({ ok: true, queryKey: 'q' })
+  })
+
+  it('accepts Parallel Search MCP web_search (objective + search_queries, no q)', () => {
+    expect(qualifyMcpSearchTool(parallelSchema)).toEqual({ ok: true, queryKey: 'objective' })
+    expect(qualifyMcpSearchTool(parallelSchema, 'q').ok).toBe(false)
+  })
+
+  it('accepts a search_queries-only tool', () => {
+    const schema = {
+      type: 'object',
+      properties: { search_queries: { type: 'array', items: { type: 'string' } } },
+      required: ['search_queries'],
+    }
+    expect(qualifyMcpSearchTool(schema)).toEqual({ ok: true, queryKey: 'search_queries' })
   })
 })
 
@@ -254,6 +320,41 @@ describe('mapSearchRequestToToolArgs', () => {
   it('throws when the tool does not qualify', () => {
     expect(() => mapSearchRequestToToolArgs(req('x'), { type: 'object', properties: {} }))
       .toThrow(/no input properties/i)
+  })
+
+  it('copies the query into both objective and search_queries', () => {
+    const { args, queryKey } = mapSearchRequestToToolArgs(req('latest hivekeep releases'), parallelSchema)
+    expect(queryKey).toBe('objective')
+    expect(args).toEqual({
+      objective: 'latest hivekeep releases',
+      search_queries: ['latest hivekeep releases'],
+    })
+  })
+
+  it('pads search_queries when the schema sets minItems', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        objective: { type: 'string' },
+        search_queries: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 3 },
+      },
+      required: ['objective', 'search_queries'],
+    }
+    expect(mapSearchRequestToToolArgs(req('cats'), schema).args.search_queries)
+      .toEqual(['cats', 'cats', 'cats'])
+  })
+
+  it('fills required objective when queryArg points at search_queries', () => {
+    const { args, queryKey } = mapSearchRequestToToolArgs(
+      req('cats'),
+      parallelSchema,
+      'search_queries',
+    )
+    expect(queryKey).toBe('search_queries')
+    expect(args).toEqual({
+      search_queries: ['cats'],
+      objective: 'cats',
+    })
   })
 })
 
@@ -353,6 +454,27 @@ describe('parseMcpSearchOutput', () => {
     expect(out.answer).toEqual({ text: 'Cats are small.' })
     expect(out.results).toHaveLength(1)
   })
+
+  it('joins excerpts[] and parses publish_date (Parallel Search MCP)', () => {
+    const out = parseMcpSearchOutput({
+      results: [{
+        url: 'https://parallel.example/post',
+        title: 'Series A',
+        publish_date: '2026-03-01',
+        excerpts: [
+          'Parallel Web Systems raises $100M.',
+          'The round values the company at $740M.',
+        ],
+      }],
+    })
+    expect(out.results).toEqual([{
+      title: 'Series A',
+      url: 'https://parallel.example/post',
+      snippet: 'Parallel Web Systems raises $100M. The round values the company at $740M.',
+      publishedAt: Date.parse('2026-03-01'),
+      domain: 'parallel.example',
+    }])
+  })
 })
 
 // ─── provider metadata / authenticate / search ───────────────────────────────
@@ -414,6 +536,15 @@ describe('mcpSearchProvider', () => {
     expect(ok).toEqual({ valid: true, accountLabel: 'Hosted Search / web_search' })
   })
 
+  it('authenticate succeeds for Parallel Search MCP web_search without queryArg=q', async () => {
+    servers.push({ id: 's1', name: 'Parallel', status: 'active' })
+    toolsByServer.s1 = [
+      { name: 'web_search', description: 'Search the web', inputSchema: parallelSchema },
+    ]
+    const ok = await mcpSearchProvider.authenticate({ server: 'Parallel', tool: 'web_search' })
+    expect(ok).toEqual({ valid: true, accountLabel: 'Parallel / web_search' })
+  })
+
   it('search invokes the MCP tool with mapped args and parses results', async () => {
     servers.push({ id: 's1', name: 'Hosted Search', status: 'active' })
     toolsByServer.s1 = [
@@ -445,6 +576,42 @@ describe('mcpSearchProvider', () => {
         domain: 'hivekeep.example',
       },
     ])
+  })
+
+  it('search maps Parallel Search MCP args (objective + search_queries, not q)', async () => {
+    servers.push({ id: 's1', name: 'Parallel', status: 'active' })
+    toolsByServer.s1 = [
+      { name: 'web_search', description: '', inputSchema: parallelSchema },
+    ]
+    invokeImpl = async () => ({
+      results: [{
+        title: 'Hivekeep',
+        url: 'https://hivekeep.example',
+        excerpts: ['self-hosted agents'],
+        publish_date: '2026-01-15',
+      }],
+    })
+
+    const result = await mcpSearchProvider.search(
+      req('hivekeep agents'),
+      { server: 'Parallel', tool: 'web_search' },
+    )
+
+    expect(invokeCalls).toEqual([{
+      serverId: 's1',
+      toolName: 'web_search',
+      args: {
+        objective: 'hivekeep agents',
+        search_queries: ['hivekeep agents'],
+      },
+    }])
+    expect(result.results).toEqual([{
+      title: 'Hivekeep',
+      url: 'https://hivekeep.example',
+      snippet: 'self-hosted agents',
+      publishedAt: Date.parse('2026-01-15'),
+      domain: 'hivekeep.example',
+    }])
   })
 
   it('search throws when the server cannot be reached', async () => {
