@@ -27,7 +27,7 @@ Agents interact with the world through **tools**: functions they can call during
 
 | Tool | Description |
 |---|---|
-| `web_search` | Search the web (Brave, Tavily, SerpAPI, Perplexity, SearXNG, or an MCP search tool) |
+| `web_search` | Search the web (Brave, Tavily, SerpAPI, Perplexity, SearXNG, or an MCP search tool). Not for looking up today's date — that is already in Context. |
 | `browse_url` | Fetch and read a web page |
 | `extract_links` | Extract all links from a URL |
 | `screenshot_url` | Take a screenshot of a web page |
