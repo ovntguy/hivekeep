@@ -108,13 +108,33 @@ A tool can back `web_search` when all of the following hold:
 
 1. The server is **active** and Hivekeep can complete the MCP handshake.
 2. The tool exists on that server. The config accepts the raw MCP name (`web_search`), a sanitised name, or the grant name `mcp_<server>_<tool>`.
-3. Hivekeep can identify a **string query argument**:
+3. Hivekeep can identify a **query argument**:
    - the optional `queryArg` config field, or
-   - a property named like `query`, `q`, `search`, `search_query`, `keywords`, `question`, `prompt`, `text`, or `input`.
-     Non-standard names (`topic`, …) need `queryArg`. Hivekeep does not treat an arbitrary required string (`path`, `file`) as a query.
-4. Every **required** input is either that query argument or another field `web_search` already knows how to fill (`count` / `max_results` / `limit`, `freshness` / `time_range`, `lang` / `language`, `location` / `country`, include/exclude domains, `answer` / `include_answer`). Unknown required fields fail closed — Hivekeep will not invent values.
+   - a string property named like `query`, `q`, `search`, `search_query`, `keywords`, `question`, `objective`, `prompt`, `text`, or `input`, or
+   - a string-array property named like `search_queries`, `searchQueries`, `queries`, or `keyword_queries`.
+     Non-standard names (`topic`, …) need `queryArg`. Hivekeep does not treat an arbitrary required string (`path`, `file`) as a query. Setting `queryArg` to `q` does nothing on a tool that has no `q` — leave it blank and let auto-detect run.
+4. Every **required** input is either that query argument or another field `web_search` already knows how to fill (`count` / `max_results` / `limit`, `freshness` / `time_range`, `lang` / `language`, `location` / `country`, include/exclude domains, `answer` / `include_answer`, companion query fields such as `objective` + `search_queries`). Unknown required fields fail closed — Hivekeep will not invent values.
+
+A tool that requires **both** a natural-language `objective` and a `search_queries` string[] (the Parallel Search MCP `web_search` shape) qualifies without `queryArg`. Hivekeep copies its single `SearchRequest.query` into `objective` and into `search_queries` as a one-element array (padded if the schema sets `minItems`).
 
 Optional unknown fields are ignored. Test Connection on the provider row checks this and shows `server / tool` as the account label when it passes.
+
+### Example: Parallel Search MCP
+
+Parallel's hosted `web_search` tool has no `q` field. It requires `objective` (string) and `search_queries` (string[]). Leave `queryArg` blank.
+
+1. **Settings → MCP**: add a remote server.
+   - name: `Parallel Search`
+   - transport: `http`
+   - url: `https://search.parallel.ai/mcp`
+   - headers: put the Parallel API key on the MCP server row (not on the search provider).
+2. **Settings → Providers**: add type **MCP**.
+   - server: `Parallel Search` (name or id)
+   - tool: `web_search`
+   - queryArg: empty
+3. Test Connection. The account label should read `Parallel Search / web_search`. You can then set this row as the default search provider.
+
+`web_search` then sends `{ objective: "<query>", search_queries: ["<query>"] }`. Result `excerpts[]` become snippets.
 
 ### Auth
 
@@ -129,14 +149,14 @@ Do not paste MCP secrets into the search provider form. There is nowhere to put 
 
 ### How a call is mapped
 
-`web_search` builds a normalised `SearchRequest`. The MCP adapter writes `query` into the resolved query argument and, when the tool schema has a matching key, best-effort maps `count`, `freshness`, `lang`, `location`, domain filters, and `answer`. Static capability flags stay conservative (`supportsAnswer: true` because unstructured text can become an answer; freshness / domains / lang / location are **not** advertised), so the host still warns when the LLM asks for a knob the adapter cannot guarantee.
+`web_search` builds a normalised `SearchRequest`. The MCP adapter writes `query` into the resolved query argument (and into companion `search_queries` / required `objective`-style fields when the schema has them) and, when the tool schema has a matching key, best-effort maps `count`, `freshness`, `lang`, `location`, domain filters, and `answer`. Static capability flags stay conservative (`supportsAnswer: true` because unstructured text can become an answer; freshness / domains / lang / location are **not** advertised), so the host still warns when the LLM asks for a knob the adapter cannot guarantee.
 
 ### How results are parsed
 
 MCP tools do not share an output schema. The adapter, in order:
 
 1. Prefers `structuredContent` when the server sends it, otherwise concatenated text content.
-2. Parses JSON objects/arrays (`results`, `organic_results`, `web.results`, `items`, `hits`, or a single `{ url, title }` object).
+2. Parses JSON objects/arrays (`results`, `organic_results`, `web.results`, `items`, `hits`, or a single `{ url, title }` object). String `snippet` / `excerpt` and `excerpts[]` become the result snippet; `publish_date` / `published_at` become `publishedAt`.
 3. Falls back to markdown `[title](url)` lists, then bare `http(s)` URLs.
 4. If nothing looks like a result list, the raw text is returned as `answer` with a warning. Use `browse_url` to read a specific page.
 
@@ -151,7 +171,7 @@ MCP tools do not share an output schema. The adapter, in order:
 | Server is `pending_approval` | Agent-created server waiting for admin approval. It contributes no tools. |
 | Could not connect | Command/URL wrong, process crashed, handshake timeout (30 s), or remote auth rejected. Fix the MCP server row, not the search provider. |
 | Tool not found | Wrong name, or the server's `listTools` set changed. Grant names must use the current sanitised server name. |
-| No query-like argument / extra required fields | The tool is not a search tool (e.g. `write_file`), or it requires a collection/index/key Hivekeep cannot fill. Pick another tool or set `queryArg`. |
+| No query-like argument / extra required fields | The tool is not a search tool (e.g. `write_file`), or it requires a collection/index/key Hivekeep cannot fill. Pick another tool or set `queryArg`. Do not set `queryArg` to `q` on a tool that uses `objective` / `search_queries` instead of `q`. |
 | `web_search` error from the tool | Upstream search error, 2 min call timeout, or the parent `web_search` timeout (`SEARCH_REQUEST_TIMEOUT`, default 30 s). |
 | Empty results + `answer` warning | The tool returned prose or an unknown JSON shape. The text is still in `answer`; it is not a crash. |
 | Freshness / domain / lang warnings | Expected. Those flags are not advertised for MCP. Matching schema keys are still forwarded when present. |
