@@ -1006,13 +1006,23 @@
     },
     "regenerate": "Regenerate",
     "toolsBadge": {
+      "label": "{{granted}}/{{max}}",
       "tooltip_one": "{{count}} tool available - click to list it",
-      "tooltip_other": "{{count}} tools available - click to list them"
+      "tooltip_other": "{{count}} tools available - click to list them",
+      "tooltipWithMax_one": "{{count}} of {{max}} tools this model accepts - click to list it",
+      "tooltipWithMax_other": "{{count}} of {{max}} tools this model accepts - click to list them",
+      "tooltipOverCap_one": "{{count}} granted, this model only accepts {{max}} per turn (extras are dropped) - click to list it",
+      "tooltipOverCap_other": "{{count}} granted, this model only accepts {{max}} per turn (extras are dropped) - click to list them",
+      "tooltipUnsupported_one": "{{count}} tool granted but this model cannot call tools - click to list it",
+      "tooltipUnsupported_other": "{{count}} tools granted but this model cannot call tools - click to list them"
     },
     "toolsModal": {
       "title": "{{name}} - tools",
       "description": "Every tool currently exposed to this agent, grouped by domain.",
       "descriptionQuick": "Tools exposed in this quick session (session-restricted tools like tasks, crons and inter-agent messaging are excluded).",
+      "capHint": "This model accepts {{max}} tools per turn.",
+      "capOver": "{{granted}} granted; extras beyond {{max}} are dropped each turn.",
+      "capUnsupported": "This model cannot call tools, so none are sent.",
       "edit": "Edit tools"
     },
     "mobileInfo": {
@@ -2591,7 +2601,10 @@
     "loading": "Loading models…",
     "vision": "vision",
     "img2img": "img2img",
-    "multiImage": "multi-ref ({{count}})"
+    "multiImage": "multi-ref ({{count}})",
+    "maxTools_one": "{{count}} tool",
+    "maxTools_other": "{{count}} tools",
+    "noToolCalls": "no tools"
   },
   "account": {
     "title": "My account",

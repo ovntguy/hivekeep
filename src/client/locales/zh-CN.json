@@ -1006,13 +1006,23 @@
     },
     "regenerate": "重新生成",
     "toolsBadge": {
+      "label": "{{granted}}/{{max}}",
       "tooltip_one": "{{count}} 个可用工具，点击查看",
-      "tooltip_other": "{{count}} 个可用工具，点击查看"
+      "tooltip_other": "{{count}} 个可用工具，点击查看",
+      "tooltipWithMax_one": "该模型每轮最多 {{max}} 个工具，当前 {{count}} 个，点击查看",
+      "tooltipWithMax_other": "该模型每轮最多 {{max}} 个工具，当前 {{count}} 个，点击查看",
+      "tooltipOverCap_one": "已授予 {{count}} 个，该模型每轮只接受 {{max}} 个（超出部分会丢弃），点击查看",
+      "tooltipOverCap_other": "已授予 {{count}} 个，该模型每轮只接受 {{max}} 个（超出部分会丢弃），点击查看",
+      "tooltipUnsupported_one": "已授予 {{count}} 个工具，但该模型无法调用工具，点击查看",
+      "tooltipUnsupported_other": "已授予 {{count}} 个工具，但该模型无法调用工具，点击查看"
     },
     "toolsModal": {
       "title": "{{name}} 的工具",
       "description": "当前暴露给此智能体的所有工具，按领域分组。",
       "descriptionQuick": "此快速会话中暴露的工具（任务、cron 和智能体间消息等受会话限制的工具不包含在内）。",
+      "capHint": "该模型每轮最多接受 {{max}} 个工具。",
+      "capOver": "已授予 {{granted}} 个；超出 {{max}} 的部分每轮都会被丢弃。",
+      "capUnsupported": "该模型无法调用工具，因此不会发送任何工具。",
       "edit": "编辑工具"
     },
     "mobileInfo": {
@@ -2591,7 +2601,10 @@
     "loading": "正在加载模型…",
     "vision": "视觉",
     "img2img": "图生图",
-    "multiImage": "多参考图（{{count}}）"
+    "multiImage": "多参考图（{{count}}）",
+    "maxTools_one": "{{count}} 个工具",
+    "maxTools_other": "{{count}} 个工具",
+    "noToolCalls": "不支持工具"
   },
   "account": {
     "title": "我的账户",

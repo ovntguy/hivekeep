@@ -1006,13 +1006,23 @@
     },
     "regenerate": "再生成",
     "toolsBadge": {
+      "label": "{{granted}}/{{max}}",
       "tooltip_one": "{{count}}個のツールが利用可能。クリックで一覧表示",
-      "tooltip_other": "{{count}}個のツールが利用可能。クリックで一覧表示"
+      "tooltip_other": "{{count}}個のツールが利用可能。クリックで一覧表示",
+      "tooltipWithMax_one": "このモデルは{{max}}個まで。現在{{count}}個。クリックで一覧",
+      "tooltipWithMax_other": "このモデルは{{max}}個まで。現在{{count}}個。クリックで一覧",
+      "tooltipOverCap_one": "{{count}}個付与、このモデルはターンあたり{{max}}個まで(超過分は破棄)。クリックで一覧",
+      "tooltipOverCap_other": "{{count}}個付与、このモデルはターンあたり{{max}}個まで(超過分は破棄)。クリックで一覧",
+      "tooltipUnsupported_one": "{{count}}個付与されていますが、このモデルはツールを呼べません。クリックで一覧",
+      "tooltipUnsupported_other": "{{count}}個付与されていますが、このモデルはツールを呼べません。クリックで一覧"
     },
     "toolsModal": {
       "title": "{{name}} のツール",
       "description": "このエージェントに現在公開されているすべてのツールを、ドメイン別にまとめています。",
       "descriptionQuick": "このクイックセッションで公開されているツールです(タスク、cron、エージェント間メッセージングなどセッション制限付きツールは除外)。",
+      "capHint": "このモデルは1ターンあたり{{max}}個のツールを受け付けます。",
+      "capOver": "{{granted}}個付与。{{max}}個を超えた分は毎ターン破棄されます。",
+      "capUnsupported": "このモデルはツールを呼べないため、何も送信されません。",
       "edit": "ツールを編集"
     },
     "mobileInfo": {
@@ -2591,7 +2601,10 @@
     "loading": "モデルを読み込み中…",
     "vision": "ビジョン",
     "img2img": "img2img",
-    "multiImage": "複数参照({{count}})"
+    "multiImage": "複数参照({{count}})",
+    "maxTools_one": "{{count}}個のツール",
+    "maxTools_other": "{{count}}個のツール",
+    "noToolCalls": "ツールなし"
   },
   "account": {
     "title": "マイアカウント",

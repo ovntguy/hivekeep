@@ -1006,13 +1006,23 @@
     },
     "regenerate": "Neu generieren",
     "toolsBadge": {
+      "label": "{{granted}}/{{max}}",
       "tooltip_one": "{{count}} Tool verfügbar, zum Auflisten klicken",
-      "tooltip_other": "{{count}} Tools verfügbar, zum Auflisten klicken"
+      "tooltip_other": "{{count}} Tools verfügbar, zum Auflisten klicken",
+      "tooltipWithMax_one": "{{count}} von {{max}} Tools, die dieses Modell akzeptiert - klicken zum Auflisten",
+      "tooltipWithMax_other": "{{count}} von {{max}} Tools, die dieses Modell akzeptiert - klicken zum Auflisten",
+      "tooltipOverCap_one": "{{count}} vergeben, dieses Modell akzeptiert nur {{max}} pro Runde (Rest wird verworfen) - klicken zum Auflisten",
+      "tooltipOverCap_other": "{{count}} vergeben, dieses Modell akzeptiert nur {{max}} pro Runde (Rest wird verworfen) - klicken zum Auflisten",
+      "tooltipUnsupported_one": "{{count}} Tool vergeben, aber dieses Modell kann keine Tools aufrufen - klicken zum Auflisten",
+      "tooltipUnsupported_other": "{{count}} Tools vergeben, aber dieses Modell kann keine Tools aufrufen - klicken zum Auflisten"
     },
     "toolsModal": {
       "title": "{{name}} - Tools",
       "description": "Alle Tools, die diesem Agenten aktuell zur Verfügung stehen, nach Domäne gruppiert.",
       "descriptionQuick": "In dieser Quick-Session verfügbare Tools (sessionsbeschränkte Tools wie Aufgaben, Crons und Agent-zu-Agent-Nachrichten sind ausgenommen).",
+      "capHint": "Dieses Modell akzeptiert {{max}} Tools pro Runde.",
+      "capOver": "{{granted}} vergeben; alles über {{max}} wird jede Runde verworfen.",
+      "capUnsupported": "Dieses Modell kann keine Tools aufrufen, daher wird keines gesendet.",
       "edit": "Tools bearbeiten"
     },
     "mobileInfo": {
@@ -2591,7 +2601,10 @@
     "loading": "Modelle werden geladen…",
     "vision": "Vision",
     "img2img": "img2img",
-    "multiImage": "Multi-Referenz ({{count}})"
+    "multiImage": "Multi-Referenz ({{count}})",
+    "maxTools_one": "{{count}} Tool",
+    "maxTools_other": "{{count}} Tools",
+    "noToolCalls": "keine Tools"
   },
   "account": {
     "title": "Mein Konto",
