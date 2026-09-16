@@ -235,7 +235,11 @@ Husky and some Node tools write to stderr. Windows PowerShell surfaces that as a
 - install: `node_modules` present
 - build: `dist\client\index.html` present
 
-`Install-Hivekeep.ps1` does exactly that. You can also set `$env:HUSKY = '0'` before `bun install`.
+`Install-Hivekeep.ps1` fails the install if `bun run build` exits non-zero. An old `dist\client\index.html` is not treated as success.
+
+If Vite reports `Could not resolve entry module "src/client/index.html"`, restore the file from git (`git checkout -- src/client/index.html`) instead of copying source files by hand, then rebuild.
+
+You can also set `$env:HUSKY = '0'` before `bun install`.
 
 ### `better-sqlite3` / `node-gyp` / missing `vswhere`
 
