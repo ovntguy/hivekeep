@@ -545,7 +545,7 @@ providerRoutes.get('/models', async (c) => {
               ...(m.capability === 'image' ? { maxImageInputs: m.maxImageInputs ?? 0 } : {}),
               ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
               ...(m.maxOutput != null ? { maxOutput: m.maxOutput } : {}),
-              ...(enriched
+              ...(m.capability === 'llm'
                 ? { maxTools: getMaxToolsForRequest(p.type, enriched) }
                 : {}),
             })
