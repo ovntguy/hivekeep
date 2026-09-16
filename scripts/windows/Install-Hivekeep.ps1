@@ -95,22 +95,24 @@ else {
 
 # ── Frontend build ───────────────────────────────────────────────────────────
 if (-not $SkipBuild) {
+    $htmlEntry = Join-Path $root 'src\client\index.html'
+    if (-not (Test-Path -LiteralPath $htmlEntry)) {
+        throw "Missing $htmlEntry (Vite entry). Restore it with: git checkout -- src/client/index.html"
+    }
+
     Write-Host 'Running bun run build (NODE_OPTIONS=--max-old-space-size=6144)...'
     $buildCode = Invoke-HivekeepBun -BunPath $bun -Arguments @('run', 'build') -WorkingDirectory $root -Environment @{
         NODE_OPTIONS = '--max-old-space-size=6144'
     }
 
     $indexHtml = Join-Path $root 'dist\client\index.html'
-    if (-not (Test-Path -LiteralPath $indexHtml)) {
-        throw "bun run build exited $buildCode and dist\client\index.html is missing. Increase memory or see docs/windows.md."
-    }
-
     if ($buildCode -ne 0) {
-        Write-Warning "bun run build reported exit code $buildCode, but dist\client\index.html exists. Treating as success."
+        throw "bun run build exited $buildCode. A leftover dist\client\index.html does not count as success. Restore src\client\index.html if Vite could not resolve the entry, then rebuild. See docs/windows.md."
     }
-    else {
-        Write-Host 'Production frontend built (dist/client).'
+    if (-not (Test-Path -LiteralPath $indexHtml)) {
+        throw "bun run build exited 0 but dist\client\index.html is missing. Increase memory or see docs/windows.md."
     }
+    Write-Host 'Production frontend built (dist/client).'
 }
 else {
     Write-Host 'Skipping build (-SkipBuild).'
