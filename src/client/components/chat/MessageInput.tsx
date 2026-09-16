@@ -19,6 +19,7 @@ import { ThinkingEffortPicker } from '@/client/components/chat/ThinkingEffortPic
 import type { AgentThinkingEffort } from '@/shared/types'
 import type { ProviderModel } from '@/client/hooks/useModels'
 import { modelReasoningInfo } from '@/client/lib/model-efforts'
+import { listedModelMaxTools } from '@/client/lib/model-max-tools'
 
 export interface MessageInputHandle {
   focus: () => void
@@ -105,10 +106,11 @@ export const MessageInput = memo(forwardRef<MessageInputHandle, MessageInputProp
   thinkingEffort = null,
   onChangeThinking,
   toolCount,
-  maxTools,
+  maxTools: maxToolsProp,
   onShowTools,
 }, ref) {
   const { t } = useTranslation()
+  const maxTools = maxToolsProp ?? listedModelMaxTools(llmModels ?? [], model, providerId)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
