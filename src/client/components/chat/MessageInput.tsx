@@ -693,7 +693,7 @@ export const MessageInput = memo(forwardRef<MessageInputHandle, MessageInputProp
                   >
                     <Wrench className="size-3.5" />
                     <span className="tabular-nums">
-                      {maxTools != null ? t('chat.toolsBadge.label', { count: toolCount, max: maxTools }) : toolCount}
+                      {maxTools != null ? t('chat.toolsBadge.label', { granted: toolCount, max: maxTools }) : toolCount}
                     </span>
                   </Button>
                 </TooltipTrigger>
