@@ -320,8 +320,16 @@ function Invoke-HivekeepBun {
             Push-Location -LiteralPath $WorkingDirectory
         }
         # Call operator: do not let PS NativeCommandError become a hard failure.
-        & $BunPath @Arguments
-        $exitCode = $LASTEXITCODE
+        # Out-Host keeps bun's log on the console without it becoming this
+        # function's return value (otherwise $installCode is an array of log
+        # lines plus 0, and -ne 0 is always true).
+        & $BunPath @Arguments | Out-Host
+        if ($null -eq $LASTEXITCODE) {
+            $exitCode = 0
+        }
+        else {
+            $exitCode = [int]$LASTEXITCODE
+        }
     }
     finally {
         if ($WorkingDirectory) {
