@@ -56,6 +56,7 @@ export const PROVIDER_META = {
   'tavily':           { capabilities: ['search'],                    displayName: 'Tavily',                 lobehubIcon: 'Tavily',    apiKeyUrl: 'https://app.tavily.com/home' },
   'perplexity-sonar': { capabilities: ['search'],                    displayName: 'Perplexity Sonar',       lobehubIcon: 'Perplexity', apiKeyUrl: 'https://www.perplexity.ai/settings/api' },
   'searxng':          { capabilities: ['search'],                    displayName: 'SearXNG',                reactIcon: 'si/SiSearxng', brandColor: '#3050FF', noApiKey: true },
+  'mcp':              { capabilities: ['search'],                    displayName: 'MCP',                    reactIcon: 'lu/LuPlug', noApiKey: true },
   'elevenlabs':       { capabilities: ['tts', 'stt'],                displayName: 'ElevenLabs',             lobehubIcon: 'ElevenLabs', apiKeyUrl: 'https://elevenlabs.io/app/settings/api-keys' },
 } as const satisfies Record<string, ProviderMeta>
 

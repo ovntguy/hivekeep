@@ -86,7 +86,7 @@ export function McpServersSettings() {
   }
 
   const list = useListControls(servers, {
-    searchText: (s) => [s.name, s.command],
+    searchText: (s) => [s.name, s.command ?? '', s.url ?? '', s.transport],
   })
 
   if (isLoading) {
@@ -119,6 +119,7 @@ export function McpServersSettings() {
           'settings.mcp.help.bullet2',
           'settings.mcp.help.bullet3',
           'settings.mcp.help.bullet4',
+          'settings.mcp.help.bullet5',
         ]}
         storageKey="help.mcp.open"
       />

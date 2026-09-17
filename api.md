@@ -675,23 +675,66 @@ Approves a cron created by an Agent (which requires validation).
   servers: Array<{
     id: string
     name: string
-    command: string
+    transport: 'stdio' | 'http' | 'sse'
+    command: string | null          // null for http/sse
     args: string[]
-    env: Record<string, string> | null
+    env: Record<string, string> | null  // keys only; values are empty strings
+    hasEnv: boolean
+    url: string | null
+    headers: Record<string, string> | null  // keys only; values are empty strings
+    hasHeaders: boolean
+    status: 'active' | 'pending_approval'
+    createdByAgentId: string | null
     createdAt: number
+    updatedAt: number
   }>
 }
 ```
 
+Env and header **values are never returned**. The objects contain keys with empty strings so the UI can show which secrets exist.
+
 ### `POST /api/mcp-servers`
 
 ```typescript
-// Request
-{ name: string, command: string, args?: string[], env?: Record<string, string> }
+// Request (stdio)
+{ name: string, transport?: 'stdio', command: string, args?: string[], env?: Record<string, string> }
+
+// Request (remote)
+{ name: string, transport: 'http' | 'sse', url: string, headers?: Record<string, string> }
 
 // Response 201
-{ server: { ...same shape } }
+{ server: { ...same shape as GET } }
 ```
+
+`transport` defaults to `stdio`. `http` uses the official Streamable HTTP client transport; `sse` uses the legacy SSE client transport. Header values (including `Authorization`) are stored like env and redacted on read.
+
+### `PATCH /api/mcp-servers/:id`
+
+```typescript
+// Request: any subset of name, transport, command, args, env, url, headers
+// Empty env/header values preserve the stored secret for that key.
+// Response 200
+{ server: { ...same shape as GET } }
+```
+
+Changing transport, command, args, env, url, or headers disconnects the pooled connection so the next call reconnects.
+
+### `POST /api/mcp-servers/:id/approve`
+
+```typescript
+// Response 200
+{ server: { ...same shape as GET } }
+// 409 ALREADY_ACTIVE if the server is not pending_approval
+```
+
+### `GET /api/mcp-servers/:id/status` · `POST /api/mcp-servers/:id/test`
+
+```typescript
+// Response 200
+{ connected: boolean, toolCount: number, error?: string }
+```
+
+`test` evicts any cached connection first.
 
 ### `DELETE /api/mcp-servers/:id`
 

@@ -5,6 +5,9 @@
  *  src/client/locales/<code>.json shipped with the app. */
 export const SUPPORTED_LANGUAGES = ['en', 'fr', 'es', 'de', 'pt-BR', 'zh-CN', 'ja', 'ru', 'it', 'pl'] as const
 
+/** MCP client transports. `http` is Streamable HTTP (current spec); `sse` is the legacy remote transport. */
+export const MCP_TRANSPORTS = ['stdio', 'http', 'sse'] as const
+
 // ─── Agent communication languages ──────────────────────────────────────────
 // Languages a user can ask Agents to speak (user_profiles.agent_language).
 // Decoupled from SUPPORTED_LANGUAGES (UI translations): LLMs speak far more

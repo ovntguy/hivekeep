@@ -4,7 +4,7 @@ import { serpapiSearchProvider } from '@/server/llm/search/serpapi'
 import { tavilySearchProvider } from '@/server/llm/search/tavily'
 import { perplexitySearchProvider } from '@/server/llm/search/perplexity'
 import { searxngSearchProvider } from '@/server/llm/search/searxng'
-import { ollamaSearchProvider } from '@/server/llm/search/ollama'
+import { mcpSearchProvider } from '@/server/llm/search/mcp'
 
 /**
  * Register every built-in search provider in the registry. Called once at
@@ -19,5 +19,5 @@ export function registerBuiltinSearchProviders(): void {
   registerSearchProvider(tavilySearchProvider)
   registerSearchProvider(perplexitySearchProvider)
   registerSearchProvider(searxngSearchProvider)
-  registerSearchProvider(ollamaSearchProvider)
+  registerSearchProvider(mcpSearchProvider)
 }

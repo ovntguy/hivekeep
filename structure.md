@@ -82,7 +82,7 @@ hivekeep/
 │   │   │   ├── image/                 # Providers image generation
 │   │   │   │   └── openai.ts, gemini.ts, openai-compatible.ts + registry/register
 │   │   │   └── search/                # Providers web search
-│   │   │       └── brave.ts, serpapi.ts, tavily.ts, perplexity.ts + registry/register
+│   │   │       └── brave.ts, serpapi.ts, tavily.ts, perplexity.ts, searxng.ts, mcp.ts + registry/register
 │   │   │
 │   │   ├── email/                     # Famille de providers email (compte = ligne providers)
 │   │   │   ├── providers/gmail.ts     # Provider Gmail natif (REST + MIME)

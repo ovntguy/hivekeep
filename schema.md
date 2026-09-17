@@ -123,9 +123,12 @@ Serveurs MCP configurés au niveau de la plateforme.
 |---|---|---|---|
 | `id` | text PK | UUID | |
 | `name` | text | NOT NULL | Nom d'affichage |
-| `command` | text | NOT NULL | Commande de lancement |
-| `args` | text | | JSON array des arguments |
-| `env` | text | | JSON object des variables d'environnement |
+| `command` | text | NOT NULL | Commande de lancement stdio (chaîne vide si `transport` est `http`/`sse`) |
+| `args` | text | | JSON array des arguments (stdio) |
+| `env` | text | | JSON object des variables d'environnement (stdio ; valeurs jamais renvoyées à l'UI) |
+| `transport` | text | NOT NULL, DEFAULT 'stdio' | `'stdio'` (processus local), `'http'` (Streamable HTTP), `'sse'` (SSE historique) |
+| `url` | text | | URL du serveur MCP distant (requis si `http`/`sse`) |
+| `headers` | text | | JSON object des en-têtes HTTP (distant ; valeurs jamais renvoyées à l'UI) |
 | `status` | text | NOT NULL, DEFAULT 'active' | 'active' ou 'pending_approval' |
 | `created_by_agent_id` | text | FK → agents.id, ON DELETE SET NULL | Agent qui a créé le serveur (si auto-géré) |
 | `created_at` | integer | NOT NULL | |

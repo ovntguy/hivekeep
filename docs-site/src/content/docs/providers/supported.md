@@ -27,6 +27,7 @@ Hivekeep ships with built-in providers across six capability families: language 
 | [Tavily](https://app.tavily.com/home) | | | | ✅ | | | ✅ |
 | [Perplexity Sonar](https://www.perplexity.ai/settings/api) | | | | ✅ | | | ✅ |
 | [SearXNG](https://github.com/searxng/searxng) (self-hosted, custom base URL) | | | | ✅ | | | ⚪ (optional) |
+| MCP (search tool on a configured MCP server) | | | | ✅ | | | ❌ (auth stays on the MCP server) |
 | [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) | | | | | ✅ | ✅ | ✅ |
 
 This table is the exact set of built-in providers (see `src/shared/provider-metadata.ts`). Notably:
@@ -37,6 +38,7 @@ This table is the exact set of built-in providers (see `src/shared/provider-meta
 - **Kilo Gateway** is built in as an LLM gateway.
 - **STT and TTS** are built in for **OpenAI** and **ElevenLabs**.
 - **SearXNG** is a self-hosted search connector: point it at your own [SearXNG](https://github.com/searxng/searxng) instance (custom base URL) to run web search privately, with no commercial search API. The instance must have the `json` format enabled (`search.formats` in `settings.yml`); the API key is optional and only needed for protected instances (sent via a configurable auth header). Do not configure it through the Tavily provider: SearXNG is not Tavily-compatible and will fail with HTTP 401.
+- **MCP** is not a search vendor. It is a selectable `web_search` backend that calls a tool on an MCP server you already registered under **Settings → MCP**. Pick the server (name or id) and the tool (raw name or `mcp_<server>_<tool>`). The provider has no API key; credentials stay on the MCP server (stdio env / HTTP headers). Hivekeep does not hardcode any third-party search MCP. Tools that take `objective` + `search_queries` (no `q`) qualify the same as tools that take `query` / `q`. See [MCP](/docs/features/mcp/#web-search-backend) for which tools qualify and the failure modes.
 - Providers such as **Mistral** and **Replicate** are not built in: they ship as plugins.
 - **OpenAI-compatible** is a generic connector: you supply a **custom base URL** (and an optional API key) to point Hivekeep at any OpenAI-style endpoint, NewAPI, LiteLLM, llama.cpp, LM Studio, vLLM, Ollama, and similar. It serves **LLM, embedding, and image** capabilities (`/chat/completions`, `/embeddings`, and `/images/generations`) on one row, so a single connector can run your agents, semantic memory, and `generate_image` against the same gateway. Its chat/embedding model list comes from the endpoint's `/models`; image models are the listing entries that look like image-generation ids (dall-e, gpt-image, flux, sdxl, imagen, …) plus an optional `imageModels` allowlist for names the heuristic misses. The API key is optional (local servers often need none). See [gaps](#openai-compatible-image-gaps) below.
 - **Local models without native tool calling still work.** Some self-hosted models reject the native tools API (for example Gemma on Ollama, which returns `400 does not support tools`). When Hivekeep detects this, it automatically switches that model to a prompt-based tool protocol, describing the tools in the prompt and parsing the model's tool calls back out, so the agent keeps working. This happens transparently, with no configuration, and is remembered per model so there is no repeated failed attempt. A low [`TOOLS_TEMPERATURE`](/docs/getting-started/configuration/) and tolerant parsing further steady tool calls on small models.
@@ -78,7 +80,7 @@ Search providers declare static capability flags so an Agent can pick the right 
 | Tavily | ✅ | ✅ | ✅ | ❌ | ❌ | Purpose-built for LLM grounding; native answer synthesis. |
 | Perplexity Sonar | ✅ | ✅ | ✅ | ❌ | ❌ | LLM-with-search; recency caps at one month (`year` → `month` with warning). |
 | SearXNG | ❌ | ✅ | ✅ | ✅ | ❌ | Self-hosted metasearch; needs `json` enabled in `search.formats`. Domain filter via `site:` operators. |
-| Ollama Cloud | ❌ | ❌ | ❌ | ❌ | ❌ | Result-only web search through Ollama's `/web_search` endpoint; no synthesized answer or advanced filters advertised. |
+| MCP | ✅ | ❌ | ❌ | ❌ | ❌ | Generic adapter: admin picks an MCP server + tool. Extra `web_search` knobs are mapped only when the tool schema has a matching key; they are not advertised. Unstructured tool text becomes `answer`. |
 
 ## Configuration
 
@@ -125,6 +127,6 @@ To use Hivekeep, you need at minimum:
 2. **One embedding provider**: For memory to work. Built in via **OpenAI** (e.g. `text-embedding-3-small`), **OpenRouter**, or the **OpenAI-compatible** connector pointed at a local endpoint (e.g. Ollama with `nomic-embed-text` or `qwen3-embedding`); other embedding sources come from plugins
 
 Optional but recommended:
-- A **search provider** for `web_search` (Brave, SerpAPI, Tavily, Perplexity Sonar, Ollama Cloud, or a self-hosted SearXNG instance)
+- A **search provider** for `web_search` (Brave, SerpAPI, Tavily, Perplexity Sonar, a self-hosted SearXNG instance, or an MCP server's search tool)
 - An **image provider** for `generate_image` (OpenAI, Gemini, OpenRouter, or an OpenAI-compatible gateway that implements `/images/generations`)
 - A **voice provider** for `text_to_speech` / `transcribe_audio` (OpenAI or ElevenLabs)
