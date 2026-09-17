@@ -240,6 +240,9 @@ Lists all available models across all configured providers.
       efforts: Array<'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
       note?: string
     }
+    // llm only: effective tools-per-request cap
+    // (model.maxTools ?? provider.defaultMaxTools ?? 128). 0 = no tool calling.
+    maxTools?: number
   }>
 }
 ```

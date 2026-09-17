@@ -19,6 +19,7 @@ import { ThinkingEffortPicker } from '@/client/components/chat/ThinkingEffortPic
 import type { AgentThinkingEffort } from '@/shared/types'
 import type { ProviderModel } from '@/client/hooks/useModels'
 import { modelReasoningInfo } from '@/client/lib/model-efforts'
+import { listedModelMaxTools } from '@/client/lib/model-max-tools'
 
 export interface MessageInputHandle {
   focus: () => void
@@ -72,6 +73,9 @@ interface MessageInputProps {
   /** Number of tools currently exposed to the agent — shown as a badge next to
    *  the effort picker. Hidden when undefined. */
   toolCount?: number
+  /** Effective per-request tool cap for the selected model (from GET
+   *  /providers/models). Shown as `count/max` on the tools badge. */
+  maxTools?: number
   /** Opens the tools listing modal (owned by the parent panel). */
   onShowTools?: () => void
 }
@@ -102,9 +106,11 @@ export const MessageInput = memo(forwardRef<MessageInputHandle, MessageInputProp
   thinkingEffort = null,
   onChangeThinking,
   toolCount,
+  maxTools: maxToolsProp,
   onShowTools,
 }, ref) {
   const { t } = useTranslation()
+  const maxTools = maxToolsProp ?? listedModelMaxTools(llmModels ?? [], model, providerId)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -679,14 +685,29 @@ export const MessageInput = memo(forwardRef<MessageInputHandle, MessageInputProp
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 shrink-0 gap-1 rounded-lg px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
+                    className={cn(
+                      'h-8 shrink-0 gap-1 rounded-lg px-2 text-xs font-normal hover:text-foreground',
+                      maxTools === 0 || (maxTools != null && toolCount > maxTools)
+                        ? 'text-warning'
+                        : 'text-muted-foreground',
+                    )}
                     onClick={onShowTools}
                   >
                     <Wrench className="size-3.5" />
-                    <span className="tabular-nums">{toolCount}</span>
+                    <span className="tabular-nums">
+                      {maxTools != null ? t('chat.toolsBadge.label', { granted: toolCount, max: maxTools }) : toolCount}
+                    </span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>{t('chat.toolsBadge.tooltip', { count: toolCount, defaultValue: '{{count}} tools available — click to list them' })}</TooltipContent>
+                <TooltipContent>
+                  {maxTools === 0
+                    ? t('chat.toolsBadge.tooltipUnsupported', { count: toolCount })
+                    : maxTools != null && toolCount > maxTools
+                      ? t('chat.toolsBadge.tooltipOverCap', { count: toolCount, max: maxTools })
+                      : maxTools != null
+                        ? t('chat.toolsBadge.tooltipWithMax', { count: toolCount, max: maxTools })
+                        : t('chat.toolsBadge.tooltip', { count: toolCount })}
+                </TooltipContent>
               </Tooltip>
             )}
           </div>
