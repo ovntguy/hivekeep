@@ -143,7 +143,7 @@ The same building blocks cover a DevOps copilot, a home brain, a personal knowle
 
 ## Providers and plugins
 
-Bring one config per provider and Hivekeep auto-detects its capabilities (`llm`, `embedding`, `image`, `search`, `stt`, `tts`). **Built in today:** Anthropic (API key, or Claude Max via in-app sign-in, no CLI needed), OpenAI (API key, or Codex via in-app sign-in, no CLI needed), Google Gemini, OpenRouter, xAI, DeepSeek, MiniMax, Kimi (Moonshot), and a generic **OpenAI-compatible** connector (your own base URL, for NewAPI / LiteLLM / llama.cpp / LM Studio / vLLM / Ollama) for LLMs; OpenAI and Gemini for images; OpenAI and the OpenAI-compatible connector (local models via Ollama, llama.cpp, etc.) for embeddings; OpenAI and ElevenLabs for speech-to-text and text-to-speech; Brave Search, SerpAPI, Tavily, and Perplexity Sonar for web search. Need more? Add any provider as a **plugin** through the typed SDK, no fork required. Local models whose backend lacks native tool calling (e.g. Gemma on Ollama) still get tools through an automatic prompt-based fallback.
+Bring one config per provider and Hivekeep auto-detects its capabilities (`llm`, `embedding`, `image`, `search`, `stt`, `tts`). **Built in today:** Anthropic (API key, or Claude Max via in-app sign-in, no CLI needed), OpenAI (API key, or Codex via in-app sign-in, no CLI needed), Google Gemini, OpenRouter (LLM, embeddings, images), Kilo Gateway, Ollama Cloud (LLM and web search), xAI, DeepSeek, MiniMax, Kimi (Moonshot), and a generic **OpenAI-compatible** connector (your own base URL, for NewAPI / LiteLLM / llama.cpp / LM Studio / vLLM / Ollama) for LLMs, embeddings, and image generation (OpenAI Images API: `/images/generations`); OpenAI, Gemini, and OpenRouter for images as well; OpenRouter for embeddings as well; OpenAI and ElevenLabs for speech-to-text and text-to-speech; Brave Search, SerpAPI, Tavily, Perplexity Sonar, and Ollama Cloud for web search. Need more? Add any provider as a **plugin** through the typed SDK, no fork required. Local models whose backend lacks native tool calling (e.g. Gemma on Ollama) still get tools through an automatic prompt-based fallback. Chat-only OpenAI-compatible servers (stock Ollama, llama.cpp) do not implement image generation — use a gateway that exposes the Images API, or the branded OpenAI / Gemini providers.
 
 ---
 
@@ -192,6 +192,10 @@ curl -fsSL https://raw.githubusercontent.com/MarlBurroW/hivekeep/main/install.sh
 The script installs [Bun](https://bun.sh) if needed, clones the repo, builds the frontend, runs migrations, creates a system service (systemd or launchd), and starts Hivekeep on port **3000**. It preflights disk, RAM, ports, and connectivity, and rolls back cleanly on failure.
 
 Then open `http://localhost:3000` and **Queenie takes it from there**: three quick screens, then she configures everything by conversation.
+
+### Windows 11 (native Bun, no WSL)
+
+`install.sh` is Linux/macOS only. On Windows 11 you can run Hivekeep with native Bun (no WSL, no Docker): see **[docs/windows.md](docs/windows.md)** (runbook + Task Scheduler) and `scripts/windows/`. Known limitations: [docs/windows-gaps.md](docs/windows-gaps.md).
 
 ### Docker (alternative)
 
