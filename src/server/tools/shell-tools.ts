@@ -6,6 +6,12 @@ import type { ToolRegistration } from '@/server/tools/types'
 import { resolveToolWorkspace } from '@/server/tools/workspace'
 import { config } from '@/server/config'
 import { subprocessEnv } from '@/server/services/subprocess-env'
+import {
+  defaultShellKind,
+  resolveShellSpawn,
+  SHELL_KINDS,
+  type ShellKind,
+} from '@/server/services/host-platform'
 
 const log = createLogger('shell-tools')
 
@@ -39,9 +45,23 @@ const WRAPPER_SUGGESTIONS: Record<string, string> = {
   grep: 'grep',
   rg: 'grep',
   ripgrep: 'grep',
+  findstr: 'grep',
   ls: 'list_directory',
+  dir: 'list_directory',
   sed: 'read_file (for inspection) or edit_file / multi_edit (for changes)',
   awk: 'read_file (for inspection) or edit_file / multi_edit (for changes)',
+  // PowerShell cmdlets / aliases (Windows 11 default interpreter).
+  'get-content': 'read_file (use offset/limit for partial reads)',
+  gc: 'read_file (use offset/limit for partial reads)',
+  'get-childitem': 'list_directory',
+  gci: 'list_directory',
+  'select-string': 'grep',
+  sls: 'grep',
+  'set-content': 'write_file or edit_file',
+  sc: 'write_file or edit_file',
+  'out-file': 'write_file',
+  'add-content': 'write_file or edit_file',
+  'measure-object': 'read_file (the response includes totalLines)',
 }
 
 // Banned commands. These either have a dedicated Hivekeep tool that performs
@@ -73,6 +93,14 @@ const BANNED_SUGGESTIONS: Record<string, string> = {
   nc: 'http_request (or ask the user before opening a raw socket)',
   netcat: 'http_request (or ask the user before opening a raw socket)',
   telnet: 'http_request (or ask the user before opening a raw socket)',
+  // PowerShell HTTP + Windows GUI browsers
+  'invoke-webrequest': 'http_request',
+  iwr: 'http_request',
+  'invoke-restmethod': 'http_request',
+  irm: 'http_request',
+  msedge: 'browse_url or screenshot_url',
+  'microsoft-edge': 'browse_url or screenshot_url',
+  'msedge.exe': 'browse_url or screenshot_url',
 }
 
 export interface ShellWrapperViolation {
@@ -142,22 +170,53 @@ export function detectHookBypass(rawCommand: string): HookBypassViolation | null
 // project file (does NOT live under /etc, /proc, /sys, /var, /tmp, /root,
 // /dev — system paths that read_file blocks outright). The pipeline rest
 // is preserved as advisory text in the refusal message.
-const SYSTEM_PATH_PREFIXES = ['/etc/', '/proc/', '/sys/', '/var/', '/tmp/', '/root/', '/dev/']
+const SYSTEM_PATH_PREFIXES = [
+  '/etc/',
+  '/proc/',
+  '/sys/',
+  '/var/',
+  '/tmp/',
+  '/root/',
+  '/dev/',
+  'c:\\windows\\',
+  'c:/windows/',
+  'c:\\program files\\',
+  'c:/program files/',
+  'c:\\programdata\\',
+  'c:/programdata/',
+]
+
+const FILE_READ_WRAPPERS = new Set(['cat', 'get-content', 'gc'])
 
 function isProjectFilePath(arg: string): boolean {
   if (!arg) return false
   if (arg.startsWith('-')) return false // flag, not a path
-  if (SYSTEM_PATH_PREFIXES.some((p) => arg.startsWith(p))) return false
+  const lower = arg.toLowerCase()
+  if (SYSTEM_PATH_PREFIXES.some((p) => lower.startsWith(p))) return false
   return true
 }
 
-function isCatWrapperPipelineStart(cmd: string): boolean {
-  // Walk to the first `|` (top-level only — ignore `||` and `|&`).
+function isFileReadWrapperPipelineStart(cmd: string): boolean {
+  // Only when this is actually a pipeline. Standalone `cat file` is handled
+  // by the first-word map; `cat <(diff a b)` must keep the redirection carve-out.
+  if (!/\|(?!\|)/.test(cmd)) return false
   const head = cmd.split(/\|(?!\|)/, 1)[0]?.trim() ?? ''
   const toks = head.split(/\s+/).filter(Boolean)
-  if (toks.length !== 2) return false
-  if (toks[0] !== 'cat') return false
-  return isProjectFilePath(toks[1]!)
+  if (toks.length < 2) return false
+  const binary = toks[0]!.toLowerCase()
+  if (!FILE_READ_WRAPPERS.has(binary)) return false
+  const fileArg = toks.find((t, i) => i > 0 && isProjectFilePath(t))
+  return Boolean(fileArg)
+}
+
+function looksLikeTypeFileRead(cmd: string): boolean {
+  // `type` is a bash builtin ("describe command") AND cmd.exe's Get-Content.
+  // Only refuse when the argument looks like a file path.
+  const toks = cmd.split(/\s+/).filter(Boolean)
+  if ((toks[0]?.toLowerCase() ?? '') !== 'type') return false
+  const arg = toks[1]
+  if (!arg || arg.startsWith('-')) return false
+  return /[\\/]|\.[a-z0-9]{1,8}$/i.test(arg)
 }
 
 /**
@@ -177,17 +236,32 @@ export function detectShellWrapper(rawCommand: string): ShellWrapperViolation | 
   let cmd = rawCommand.trim()
   if (!cmd) return null
 
-  // Strip a leading `cd <path> && ` or `cd <path> ; ` — the agent often
-  // prefixes its file-inspection commands with one (cosmetic, not a real
-  // pipeline). This makes the detector see the actual entrypoint.
-  const cdMatch = cmd.match(/^cd\s+(?:"[^"]+"|'[^']+'|\S+)\s*(?:&&|;)\s*/)
+  // Strip a leading `cd <path> && ` / `cd <path> ; ` / PowerShell Set-Location.
+  const cdMatch = cmd.match(
+    /^(?:cd|set-location|sl|push-location|pushd)\s+(?:"[^"]+"|'[^']+'|\S+)\s*(?:&&|;)\s*/i,
+  )
   if (cdMatch) cmd = cmd.slice(cdMatch[0].length).trim()
 
-  // `cat <project_file> | …` — caught BEFORE the pipeline carve-out below.
-  if (isCatWrapperPipelineStart(cmd)) {
+  // `cat <project_file> | …` / `Get-Content <project_file> | …`
+  if (isFileReadWrapperPipelineStart(cmd)) {
+    const binary = cmd.split(/\s+/)[0]!.toLowerCase()
     return {
-      binary: 'cat',
-      suggestion: WRAPPER_SUGGESTIONS.cat!,
+      binary,
+      suggestion: WRAPPER_SUGGESTIONS[binary] ?? WRAPPER_SUGGESTIONS.cat!,
+      reason: 'wrapper',
+    }
+  }
+
+  // Anything that includes pipelines, redirections, command substitution, or
+  // chained commands is treated as legitimate — `cat <(...)`, `... | grep`,
+  // `head ... > out`, `cmd1 && cmd2` all have valid reasons to call into
+  // these binaries as filters.
+  if (/[|<>`]|\$\(|&&|\|\|/.test(cmd)) return null
+
+  if (looksLikeTypeFileRead(cmd)) {
+    return {
+      binary: 'type',
+      suggestion: WRAPPER_SUGGESTIONS['get-content']!,
       reason: 'wrapper',
     }
   }
@@ -227,14 +301,31 @@ export const _SHELL_INTERNALS_FOR_TEST = { truncateOutput, MAX_OUTPUT_LENGTH }
 
 // ─── run_shell tool ──────────────────────────────────────────────────────────
 
+export function buildRunShellDescription(kind: ShellKind = defaultShellKind()): string {
+  const interpreter =
+    kind === 'bash'
+      ? 'bash -c'
+      : kind === 'cmd'
+        ? 'cmd.exe /c'
+        : kind === 'pwsh'
+          ? 'pwsh -NoProfile -NonInteractive -Command'
+          : 'powershell.exe -NoProfile -NonInteractive -Command'
+  const windowsLead =
+    kind === 'bash'
+      ? 'Run a shell command (bash -c).'
+      : `Run a command on this Windows host. **Default interpreter is PowerShell** (${interpreter}). Write PowerShell, not bash, unless you pass \`shell=bash\` (Git Bash) or \`shell=cmd\`. On Windows PowerShell 5.1 chain with \`;\` — \`&&\` is PowerShell 7+ only.`
+  return (
+    `${windowsLead} Returns stdout, stderr, exit code. Vault secrets: write \`{{secret:KEY}}\` in the command (e.g. \`GITHUB_TOKEN={{secret:GITHUB_TOKEN}} bun run script.ts\`) — it is delivered to the subprocess as an environment variable, never spliced into the command line; use double quotes around it, never single quotes (they block expansion); the \`HIVEKEEP_SECRET_*\` env prefix is reserved for this mechanism. Use for: git, builds, tests, package managers, language tooling, and (on Windows) services/process/winget/Task Scheduler. **Never use for: cat, head, tail, sed, awk, grep, find, ls, wc, echo, Get-Content, Get-ChildItem, Select-String, type, dir, findstr** — those have dedicated tools (\`read_file\` with offset/limit, \`grep\`, \`list_directory\`, \`edit_file\`, \`multi_edit\`). **Never use for: curl, wget, httpie, Invoke-WebRequest, iwr, lynx, w3m, browsers, nc, telnet** — use \`http_request\` / \`browse_url\` / \`screenshot_url\` instead. The runner refuses standalone wrappers around those binaries and asks you to retry with the dedicated tool. Pass \`cwd\` as a parameter instead of \`cd ... &&\` / \`Set-Location\` prefixes. Output is capped at 30 KB — re-run with narrower options if you need more. Never use \`--no-verify\`, \`git push --force\`, or \`git reset --hard\` without explicit authorization.`
+  )
+}
+
 export const runShellTool: ToolRegistration = {
   availability: ['main', 'sub-agent'],
   expandsSecrets: true,
   secretsViaEnv: true,
   create: (ctx) =>
     tool({
-      description:
-        'Run a shell command (bash -c). Returns stdout, stderr, exit code. Vault secrets: write `{{secret:KEY}}` in the command (e.g. `GITHUB_TOKEN={{secret:GITHUB_TOKEN}} bun run script.ts`) — it is delivered to the subprocess as an environment variable, never spliced into the command line; use double quotes around it, never single quotes (they block expansion); the `HIVEKEEP_SECRET_*` env prefix is reserved for this mechanism. Use for: git, builds, tests, package managers, language tooling. **Never use for: cat, head, tail, sed, awk, grep, find, ls, wc, echo** — those have dedicated tools (`read_file` with offset/limit, `grep`, `list_directory`, `edit_file`, `multi_edit`). **Never use for: curl, wget, httpie, lynx, w3m, browsers, nc, telnet** — use `http_request` / `browse_url` / `screenshot_url` instead. The runner refuses standalone wrappers around those binaries and asks you to retry with the dedicated tool. Pass `cwd` as a parameter instead of `cd ... &&` prefixes. Output is capped at 30 KB — re-run with narrower options if you need more. Never use `--no-verify`, `git push --force`, or `git reset --hard` without explicit authorization.',
+      description: buildRunShellDescription(),
       inputSchema: z.object({
         command: z.string(),
         cwd: z
@@ -248,8 +339,14 @@ export const runShellTool: ToolRegistration = {
           .max(MAX_TIMEOUT)
           .optional()
           .describe(`Ms. Default: ${DEFAULT_TIMEOUT}, max: ${MAX_TIMEOUT}. Raise it for slow commands (large test suites, builds, migrations) so they aren't killed mid-run.`),
+        shell: z
+          .enum(SHELL_KINDS)
+          .optional()
+          .describe(
+            'Interpreter. On Windows defaults to PowerShell (pwsh if installed, else powershell.exe). On Linux/macOS defaults to bash. Use cmd for batch syntax, bash for Git Bash POSIX.',
+          ),
       }),
-      execute: async ({ command, cwd, timeout }, options) => {
+      execute: async ({ command, cwd, timeout, shell }, options) => {
         const abortSignal = (options as { abortSignal?: AbortSignal } | undefined)?.abortSignal
         // Expanded vault secrets delivered by the tool-executor (secretsViaEnv):
         // merged into the subprocess env below — the command string only ever
@@ -314,7 +411,8 @@ export const runShellTool: ToolRegistration = {
         let onAbort: (() => void) | undefined
         let abortSignalRef: AbortSignal | undefined
         try {
-          const proc = Bun.spawn(['bash', '-c', command], {
+          const spawnSpec = resolveShellSpawn(command, shell)
+          const proc = Bun.spawn([spawnSpec.file, ...spawnSpec.args], {
             cwd: effectiveCwd,
             stdout: 'pipe',
             stderr: 'pipe',
