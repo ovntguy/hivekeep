@@ -2,7 +2,8 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { config } from '@/server/config'
 import { generateWorkspaceTree } from '@/server/services/workspace-tree'
-import type { SystemContext } from '@/server/services/system-context'
+import { type SystemContext } from '@/server/services/system-context'
+import { defaultShellKind, isWindowsPlatform } from '@/server/services/host-platform'
 import type { AgentKind } from '@/shared/types'
 import { AGENT_LANGUAGE_NAMES } from '@/shared/constants'
 
@@ -20,6 +21,21 @@ function getQueenieKnowledge(): string {
     }
   }
   return cachedQueenieKnowledge
+}
+
+let cachedWindowsCliKnowledge: string | null = null
+function getWindowsCliKnowledge(): string {
+  if (cachedWindowsCliKnowledge === null) {
+    try {
+      cachedWindowsCliKnowledge = readFileSync(
+        join(import.meta.dir, '..', 'assets', 'windows-cli-knowledge.md'),
+        'utf-8',
+      ).trim()
+    } catch {
+      cachedWindowsCliKnowledge = ''
+    }
+  }
+  return cachedWindowsCliKnowledge
 }
 
 const CONFIGURATOR_MISSION = `## Configurator mission
@@ -146,10 +162,13 @@ interface PromptParams {
   }
   /** Absolute path to the Agent's workspace directory */
   workspacePath?: string
-  /** Host system context (platform, arch, available CLIs). Injected as a stable
-   *  block in sub-Agent prompts so delegated tasks don't waste tool calls probing
-   *  the environment. Cached at the service level — same value reused across
-   *  every spawn until server restart. */
+  /** Host system context (platform, arch, available CLIs, default shell).
+   *  Injected as a stable Environment block for every Agent (main, sub, quick)
+   *  so they know the OS and which interpreter `run_shell` uses. Cached at the
+   *  service level — same value reused across every spawn until server restart.
+   *  When omitted, the builder still reports `process.platform` and the
+   *  default shell so no Agent is OS-blind; production callers pass
+   *  `getSystemContext()` so the probed CLI list is included. */
   systemContext?: SystemContext
   /** Current structured plan for this sub-Agent task, as maintained via the
    *  `task_todos` tool. Rendered in the volatile segment so the agent sees
@@ -238,6 +257,7 @@ function buildContextBlock(): string {
     `Current time: ${time} (${tz})\n` +
     `ISO timestamp: ${iso}\n` +
     `Timezone: ${tz} — interpret schedules and wall-clock times in this zone unless the user asks otherwise\n` +
+    `Wall-clock date and time above are authoritative — do not web_search to look them up.\n` +
     `Platform: Hivekeep v${config.version}\n` +
     `Installation: ${installLine}${envFileLine}\n` +
     `Data directory: ${config.dataDir}\n` +
@@ -372,24 +392,60 @@ function buildTaskTodosBlock(
   return lines.join('\n')
 }
 
+function resolvePromptSystemContext(params: PromptParams): SystemContext {
+  if (params.systemContext) return params.systemContext
+  // Lightweight fallback so a missed caller still tells the Agent the OS and
+  // default shell. Production paths pass `getSystemContext()` (probed CLIs).
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    runtimes: [],
+    defaultShell: defaultShellKind(),
+  }
+}
+
 function buildSystemContextBlock(ctx: SystemContext, workspacePath?: string): string {
   const runtimesLine =
     ctx.runtimes.length > 0
       ? ctx.runtimes.map((r) => `${r.name} (${r.version})`).join(', ')
       : 'none detected'
+  const windows = isWindowsPlatform(ctx.platform)
+  const defaultShell = ctx.defaultShell ?? (windows ? defaultShellKind('win32') : 'bash')
   const lines: string[] = [
     '## Environment',
     '',
     `- Platform: ${ctx.platform} (${ctx.arch})`,
   ]
+  if (windows) {
+    lines.push(`- Host OS: Windows 11 (native Bun). Windows tools are the default for command-line calls.`)
+    lines.push(`- Default \`run_shell\` interpreter: **PowerShell** (\`${defaultShell}\`). Optional \`shell\` argument: powershell | pwsh | cmd | bash.`)
+  } else {
+    lines.push(`- Default \`run_shell\` interpreter: **bash**.`)
+  }
   if (workspacePath) {
-    lines.push(`- Workspace: ${workspacePath} (default cwd for run_shell — pass it via the \`cwd\` parameter, not via \`cd ... &&\` prefixes)`)
+    const prefixHint = windows
+      ? 'pass it via the `cwd` parameter, not via `cd ...;` / `Set-Location` prefixes'
+      : 'pass it via the `cwd` parameter, not via `cd ... &&` prefixes'
+    lines.push(`- Workspace: ${workspacePath} (default cwd for run_shell — ${prefixHint})`)
   }
   lines.push(`- Available CLIs in run_shell: ${runtimesLine}`)
   lines.push('')
-  lines.push(
-    '> The list above is the runner\'s own login-shell PATH. `run_shell` already inherits these directories — call the binary directly. **Never** probe with `which`, `command -v`, `find / -name <tool>`, `ls ~/.bun/bin`, or fallback chains like `export PATH=...`; the result will not change. If the tool you need is missing from the list, attempt the command anyway and trust the exit code — do NOT search for it.',
-  )
+  if (windows) {
+    lines.push(
+      '> The list above is the runner\'s own PATH. `run_shell` already inherits these directories — call the binary directly. **Never** probe with `which`, `command -v`, `Get-Command` loops, `where.exe` fishing, or `ls $env:USERPROFILE\\.bun\\bin`; the result will not change. If the tool you need is missing from the list, attempt the command anyway and trust the exit code — do NOT search for it.',
+    )
+    const knowledge = getWindowsCliKnowledge()
+    if (knowledge) {
+      lines.push('')
+      lines.push('## Windows CLI')
+      lines.push('')
+      lines.push(knowledge)
+    }
+  } else {
+    lines.push(
+      '> The list above is the runner\'s own login-shell PATH. `run_shell` already inherits these directories — call the binary directly. **Never** probe with `which`, `command -v`, `find / -name <tool>`, `ls ~/.bun/bin`, or fallback chains like `export PATH=...`; the result will not change. If the tool you need is missing from the list, attempt the command anyway and trust the exit code — do NOT search for it.',
+    )
+  }
   return lines.join('\n')
 }
 /**
@@ -440,6 +496,14 @@ export function buildSystemPrompt(params: PromptParams): BuiltSystemPrompt {
   // guidance with no actual tool channel and starts emitting JSON
   // tool-call syntax as plain text.
   const toolsEnabled = params.toolsEnabled !== false
+  const hostCtx = resolvePromptSystemContext(params)
+  const windowsHost = isWindowsPlatform(hostCtx.platform)
+  const shellWrapperList = windowsHost
+    ? 'cat/head/tail/sed/awk/wc/ls/find/echo/Get-Content/Get-ChildItem/Select-String/type/dir'
+    : 'cat/head/tail/sed/awk/wc/ls/find/echo'
+  const failingCmdTail = windowsHost
+    ? '`<cmd> 2>&1 | Select-Object -Last 80`'
+    : '`<cmd> 2>&1 | tail -80`'
 
   if (params.isSubAgent && params.taskDescription) {
     // Sub-Agent prompt
@@ -449,11 +513,10 @@ export function buildSystemPrompt(params: PromptParams): BuiltSystemPrompt {
     )
     stableBlocks.push(`## Your mission\n\n${params.taskDescription}`)
 
-    // Environment block — platform, arch, available CLIs. Stable: the host
-    // doesn't change during a task. Saves the sub-Agent a handful of probe calls.
-    if (params.systemContext) {
-      stableBlocks.push(buildSystemContextBlock(params.systemContext, params.workspacePath))
-    }
+    // Environment block — platform, arch, default shell, available CLIs.
+    // All Agents get this (not just sub-Agents) so a Windows host is never
+    // mistaken for Linux/bash.
+    stableBlocks.push(buildSystemContextBlock(hostCtx, params.workspacePath))
 
     const isCronTask = params.previousCronRuns !== undefined
     const cronJournalInstruction = isCronTask
@@ -479,11 +542,11 @@ export function buildSystemPrompt(params: PromptParams): BuiltSystemPrompt {
       `## Execution discipline\n\n` +
       `These rules keep your work efficient. Most wasted tool calls come from violating one of them.\n\n` +
       `- **Don't re-read what's already in your context.** Before calling \`read_file\` or \`grep\`, scan up: if the file content or match was already shown in this task, reuse it.\n` +
-      `- **Use the dedicated file tools, not shell wrappers.** \`read_file\` (with \`offset\`/\`limit\` for partial reads), \`grep\`, \`list_directory\`, \`edit_file\`, \`multi_edit\` — NEVER \`run_shell\` with cat/head/tail/sed/awk/wc/ls/find/echo. They have dedicated tools that cost fewer tokens.\n` +
+      `- **Use the dedicated file tools, not shell wrappers.** \`read_file\` (with \`offset\`/\`limit\` for partial reads), \`grep\`, \`list_directory\`, \`edit_file\`, \`multi_edit\` — NEVER \`run_shell\` with ${shellWrapperList}. They have dedicated tools that cost fewer tokens.\n` +
       `- **Use \`multi_edit\` for >1 change to the same file.** Never chain multiple \`edit_file\` calls on the same path.\n` +
       `- **Fan out independent reads in one step.** \`read_file\`, \`grep\`, \`list_directory\` are parallel-safe — emit several tool calls in the same assistant turn rather than waiting for each result.\n` +
       `- **Broaden before narrowing, and scan your prior greps first.** One \`grep\` with regex alternation \`(foo|bar|baz)\` or a wider pattern beats three sequential narrow greps. Before issuing a new \`grep\`, look at the ones you've already run this task — if the pattern overlaps, the matches are probably already in your context.\n` +
-      `- **Read full command output before filtering it.** When \`bun test\`, \`tsc\`, a build, or any long command fails, run \`<cmd> 2>&1 | tail -80\` (or no filter) once to see what actually went wrong. Iterating \`<cmd> | grep -E '...'\` with different patterns to fish out failures wastes calls and rarely matches what you expected.\n` +
+      `- **Read full command output before filtering it.** When \`bun test\`, \`tsc\`, a build, or any long command fails, run ${failingCmdTail} (or no filter) once to see what actually went wrong. Iterating \`<cmd> | grep -E '...'\` with different patterns to fish out failures wastes calls and rarely matches what you expected.\n` +
       `- **Delegate heavy read-only exploration with the \`scout\` tool — this is the single biggest efficiency lever.** Whenever answering "where / how / what" would cost you more than ~5 reads/greps before you can actually act (unfamiliar codebase, "find every call site of X", "how does subsystem Y work", large refactor scoping), DON'T grind through it inline on your expensive model. Call \`scout({ task_description: \"locate X, Y, Z and report exact file paths + the relevant excerpts and how they fit together\" })\`. It runs a cheap, fast model with read-only tools (grep/read_file/list_directory/web_search/browse_url) and BLOCKS until it returns a digest, which becomes the tool result. You get the findings without the 90 wasted steps, and your context stays light for the real work. This is exactly how Claude Code delegates exploration to a fast sub-agent. Write a precise, self-contained \`task_description\` (the scout has none of your context) and ask for paths + excerpts, not vague summaries. Skip it only for trivial lookups (1–3 files you can name).\n` +
       `- **Never bypass safety.** Do NOT use \`--no-verify\`, \`--no-gpg-sign\`, \`HUSKY=0\`, \`SKIP_HOOKS=1\`, \`git reset --hard\`, \`git push --force\`, or push directly to protected branches without explicit authorization in your mission. If a hook fails, fix the underlying issue. The runner refuses bypass markers at execution time.\n` +
       `- **Don't spelunk git history to understand the current state.** \`git log -S\`, \`git log -p\`, \`git show <hash>\`, \`git log --all\` are debugging tools for tracking down a regression — not the way to discover what the code looks like *now*. Read the current files instead; the present state is the source of truth.\n` +
@@ -559,6 +622,10 @@ export function buildSystemPrompt(params: PromptParams): BuiltSystemPrompt {
     // [1] Identity (with slug)
     const slugSuffix = params.agent.slug ? ` (slug: ${params.agent.slug})` : ''
     stableBlocks.push(`You are ${params.agent.name}${slugSuffix}, ${params.agent.role}.`)
+
+    // Environment — every main / quick-session Agent sees the host OS and the
+    // default run_shell interpreter (PowerShell on Windows 11).
+    stableBlocks.push(buildSystemContextBlock(hostCtx, params.workspacePath))
 
     // [1.5] Core principles (universal baseline for all Agents)
     stableBlocks.push(
@@ -815,21 +882,21 @@ export function buildSystemPrompt(params: PromptParams): BuiltSystemPrompt {
       `- Use store_file() to create shareable files. Always share the URL with the user after.\n` +
       `- Check list_stored_files() before creating duplicates.\n\n` +
       `### Tool usage strategy\n` +
-      `- Use web_search() for current information, then browse_url() for full content.\n` +
+      `- Use web_search() for current events and facts you do not already have, then browse_url() for full content. Do not web_search for today's date or time; Context already lists them.\n` +
       `- Delegate heavy tasks to spawn_self()/spawn_agent() to avoid blocking the queue.\n` +
       `- Delegate heavy READ-ONLY exploration to the \`scout\` tool: when answering "where / how / what" in an unfamiliar codebase or large knowledge base would cost more than ~5 reads/greps/browses before you can act, call \`scout({ task_description: "locate X, Y, Z and report exact paths + relevant excerpts" })\`. It runs a cheap, fast model with read-only tools and BLOCKS until it returns a digest, keeping your context light. Skip it only for trivial lookups (1-3 items you can name).\n` +
       `- Use store_file() for substantial content instead of long chat messages.\n\n` +
       `### File & code tool selection\n` +
       `| Task | Use | Do NOT use |\n` +
       `|---|---|---|\n` +
-      `| Search file contents | grep | run_shell with grep/rg |\n` +
-      `| Find files by pattern | list_directory with pattern | run_shell with find/ls |\n` +
-      `| Read a file | read_file | run_shell with cat/head/tail |\n` +
+      `| Search file contents | grep | run_shell with grep/rg/Select-String/findstr |\n` +
+      `| Find files by pattern | list_directory with pattern | run_shell with find/ls/Get-ChildItem/dir |\n` +
+      `| Read a file | read_file | run_shell with cat/head/tail/Get-Content/type |\n` +
       `| Single text replacement | edit_file | run_shell with sed/awk |\n` +
       `| Replace all occurrences | edit_file with replaceAll=true | multiple edit_file calls |\n` +
       `| Multiple edits, same file | multi_edit | sequential edit_file calls |\n` +
-      `| Create/overwrite file | write_file | run_shell with echo > |\n` +
-      `| Git, builds, tests | run_shell | — |\n\n` +
+      `| Create/overwrite file | write_file | run_shell with echo > / Set-Content / Out-File |\n` +
+      `| Git, builds, tests, OS admin | run_shell (PowerShell on Windows; bash on Linux/macOS) | — |\n\n` +
       `Prefer structured tools over run_shell for file operations — they have better error handling, security, and structured output. Use grep before read_file when locating something in a codebase. Use multi_edit for 2+ changes to the same file (atomic: all succeed or none applied).\n\n` +
       `### Reusable custom tools\n` +
       `- When you build or automate something that could help OTHER Agents (or that your future self would reuse), turn it into a custom tool with create_custom_tool. Custom tools are GLOBAL and granted to any Agent via toolboxes, so a good one becomes a shared, permanent capability. Don't create one for a true one-shot task.\n` +
@@ -1053,7 +1120,7 @@ export function buildSystemPrompt(params: PromptParams): BuiltSystemPrompt {
     volatileBlocks.push(
       `## Final reminder (this turn)\n\n` +
       `- Don't re-read files already shown in this task — scan your context first.\n` +
-      `- Use \`read_file\`/\`grep\`/\`list_directory\`/\`multi_edit\`, never \`run_shell\` with cat/head/sed/awk/find/wc.\n` +
+      `- Use \`read_file\`/\`grep\`/\`list_directory\`/\`multi_edit\`, never \`run_shell\` with ${shellWrapperList}.\n` +
       `- Fan out independent reads in one step (parallel tool calls).\n` +
       `- Before any tool call: at most one sentence of intent, never the results.\n` +
       `- Never bypass safety (\`--no-verify\`, force-push, hard reset) without explicit authorization.`,

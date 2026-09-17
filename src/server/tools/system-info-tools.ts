@@ -55,22 +55,38 @@ function getDetailedSystemInfo() {
 
   // Disk usage (best-effort)
   try {
-    const df = execSync('df -h --output=target,size,used,avail,pcent / /home 2>/dev/null || df -h / 2>/dev/null', {
-      timeout: 3000,
-      encoding: 'utf-8',
-    }).trim()
-    result.disk = df
+    if (os.platform() === 'win32') {
+      const disk = execSync(
+        'powershell.exe -NoProfile -NonInteractive -Command "Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID,FileSystem,@{N=\'SizeGB\';E={[math]::Round($_.Size/1GB,1)}},@{N=\'FreeGB\';E={[math]::Round($_.FreeSpace/1GB,1)}} | Format-Table -AutoSize | Out-String"',
+        { timeout: 5000, encoding: 'utf-8' },
+      ).trim()
+      result.disk = disk || 'unavailable'
+    } else {
+      const df = execSync('df -h --output=target,size,used,avail,pcent / /home 2>/dev/null || df -h / 2>/dev/null', {
+        timeout: 3000,
+        encoding: 'utf-8',
+      }).trim()
+      result.disk = df
+    }
   } catch {
     result.disk = 'unavailable'
   }
 
   // Top processes by CPU (best-effort)
   try {
-    const top = execSync('ps aux --sort=-%cpu | head -6', {
-      timeout: 3000,
-      encoding: 'utf-8',
-    }).trim()
-    result.topProcesses = top
+    if (os.platform() === 'win32') {
+      const top = execSync(
+        'powershell.exe -NoProfile -NonInteractive -Command "Get-Process | Sort-Object CPU -Descending | Select-Object -First 8 Name,Id,CPU,WorkingSet | Format-Table -AutoSize | Out-String"',
+        { timeout: 5000, encoding: 'utf-8' },
+      ).trim()
+      result.topProcesses = top || 'unavailable'
+    } else {
+      const top = execSync('ps aux --sort=-%cpu | head -6', {
+        timeout: 3000,
+        encoding: 'utf-8',
+      }).trim()
+      result.topProcesses = top
+    }
   } catch {
     result.topProcesses = 'unavailable'
   }
@@ -117,7 +133,7 @@ export const getSystemInfoTool: ToolRegistration = {
   create: () =>
     tool({
       description:
-        'Get detailed host system info: CPU, RAM, disk, network, uptime, top processes, Docker.',
+        'Get detailed host system info: OS, CPU, RAM, disk, network, uptime, top processes, Docker. On Windows, disk and process listings use PowerShell (Get-CimInstance / Get-Process).',
       inputSchema: z.object({}),
       execute: async () => {
         try {
