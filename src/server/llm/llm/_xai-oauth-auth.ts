@@ -72,7 +72,7 @@ interface ParsedGrokAuth {
 
 /**
  * Parse a Grok CLI / SuperGrok auth file. Accepts:
- *   - Grok CLI map: `{ "https://auth.x.ai::\u003cclient_id\u003e": { key, refresh_token, expires_at } }`
+ *   - Grok CLI map: `{ "https://auth.x.ai::<client_id>": { key, refresh_token, expires_at } }`
  *   - Flat OAuth: `{ access_token, refresh_token, expires_at? }`
  *   - pi-style: `{ access, refresh, expires }`
  *
@@ -83,43 +83,43 @@ export function parseGrokAuthFile(raw: string, preferredClientId: string = CLIEN
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Grok auth file is not a JSON object')
   }
-  const obj = parsed as Record\u003cstring, unknown\u003e
+  const obj = parsed as Record<string, unknown>
 
   const preferredKey = `https://auth.x.ai::${preferredClientId}`
-  const nested = obj[preferredKey] ?? Object.entries(obj).find(([k]) =\u003e k.startsWith('https://auth.x.ai::'))?.[1]
-  if (nested \u0026\u0026 typeof nested === 'object') {
-    const entry = nested as Record\u003cstring, unknown\u003e
+  const nested = obj[preferredKey] ?? Object.entries(obj).find(([k]) => k.startsWith('https://auth.x.ai::'))?.[1]
+  if (nested && typeof nested === 'object') {
+    const entry = nested as Record<string, unknown>
     const access = stringField(entry, 'key') ?? stringField(entry, 'access_token') ?? stringField(entry, 'access')
     const refresh = stringField(entry, 'refresh_token') ?? stringField(entry, 'refresh')
-    if (access \u0026\u0026 refresh) {
+    if (access && refresh) {
       return { accessToken: access, refreshToken: refresh, expiresAt: expiryField(entry) }
     }
   }
 
   const access = stringField(obj, 'access_token') ?? stringField(obj, 'access')
   const refresh = stringField(obj, 'refresh_token') ?? stringField(obj, 'refresh')
-  if (access \u0026\u0026 refresh) {
+  if (access && refresh) {
     return { accessToken: access, refreshToken: refresh, expiresAt: expiryField(obj) }
   }
 
   throw new Error('Grok auth file has no access/refresh token pair')
 }
 
-function stringField(obj: Record\u003cstring, unknown\u003e, key: string): string | undefined {
+function stringField(obj: Record<string, unknown>, key: string): string | undefined {
   const v = obj[key]
-  return typeof v === 'string' \u0026\u0026 v.length \u003e 0 ? v : undefined
+  return typeof v === 'string' && v.length > 0 ? v : undefined
 }
 
 /** expires_at may be Unix seconds or ms; `expires` is an absolute ms timestamp. */
-function expiryField(obj: Record\u003cstring, unknown\u003e): number | undefined {
+function expiryField(obj: Record<string, unknown>): number | undefined {
   const raw = obj.expires_at ?? obj.expiresAt ?? obj.expires
-  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw \u003c= 0) return undefined
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return undefined
   // Values that look like seconds (before year ~2001 in ms, or typical JWT exp).
-  return raw \u003c 1e12 ? raw * 1000 : raw
+  return raw < 1e12 ? raw * 1000 : raw
 }
 
 function resolveCredsPath(overridePath?: string): string {
-  if (overridePath \u0026\u0026 overridePath.trim().length \u003e 0) {
+  if (overridePath && overridePath.trim().length > 0) {
     if (!existsSync(overridePath)) {
       throw new Error(`Grok credentials file not found at: ${overridePath}`)
     }
@@ -136,27 +136,27 @@ function resolveCredsPath(overridePath?: string): string {
   )
 }
 
-const accessTokenCache = new Map\u003cstring, { accessToken: string; expiresAt: number }\u003e()
-const refreshLocks = new Map\u003cstring, Promise\u003cstring\u003e\u003e()
+const accessTokenCache = new Map<string, { accessToken: string; expiresAt: number }>()
+const refreshLocks = new Map<string, Promise<string>>()
 
-function ensureFresh(cacheKey: string, refresh: () =\u003e Promise\u003cstring\u003e): Promise\u003cstring\u003e {
+function ensureFresh(cacheKey: string, refresh: () => Promise<string>): Promise<string> {
   const cached = accessTokenCache.get(cacheKey)
-  if (cached \u0026\u0026 cached.expiresAt - Date.now() \u003e BUFFER_MS) {
+  if (cached && cached.expiresAt - Date.now() > BUFFER_MS) {
     return Promise.resolve(cached.accessToken)
   }
   let lock = refreshLocks.get(cacheKey)
   if (!lock) {
-    lock = refresh().finally(() =\u003e refreshLocks.delete(cacheKey))
+    lock = refresh().finally(() => refreshLocks.delete(cacheKey))
     refreshLocks.set(cacheKey, lock)
   }
   return lock
 }
 
-async function refreshFromFile(credsPath: string): Promise\u003cstring\u003e {
+async function refreshFromFile(credsPath: string): Promise<string> {
   const raw = readFileSync(credsPath, 'utf8')
   const parsed = parseGrokAuthFile(raw)
   const now = Date.now()
-  if (parsed.expiresAt \u0026\u0026 parsed.expiresAt - now \u003e BUFFER_MS \u0026\u0026 parsed.accessToken) {
+  if (parsed.expiresAt && parsed.expiresAt - now > BUFFER_MS && parsed.accessToken) {
     accessTokenCache.set(credsPath, { accessToken: parsed.accessToken, expiresAt: parsed.expiresAt })
     return parsed.accessToken
   }
@@ -173,7 +173,7 @@ async function refreshFromFile(credsPath: string): Promise\u003cstring\u003e {
     signal: AbortSignal.timeout(30_000),
   })
   if (!resp.ok) {
-    const text = await resp.text().catch(() =\u003e '')
+    const text = await resp.text().catch(() => '')
     throw new Error(`xAI OAuth token refresh failed (${resp.status}): ${text.slice(0, 200)}`)
   }
   const data = (await resp.json()) as {
@@ -187,10 +187,10 @@ async function refreshFromFile(credsPath: string): Promise\u003cstring\u003e {
   const nextRefresh = data.refresh_token ?? parsed.refreshToken
 
   try {
-    const original = JSON.parse(raw) as Record\u003cstring, unknown\u003e
+    const original = JSON.parse(raw) as Record<string, unknown>
     const preferredKey = `https://auth.x.ai::${XAI_PKCE_CLIENT.clientId}`
-    if (original[preferredKey] \u0026\u0026 typeof original[preferredKey] === 'object') {
-      const entry = original[preferredKey] as Record\u003cstring, unknown\u003e
+    if (original[preferredKey] && typeof original[preferredKey] === 'object') {
+      const entry = original[preferredKey] as Record<string, unknown>
       if ('key' in entry) entry.key = data.access_token
       else entry.access_token = data.access_token
       entry.refresh_token = nextRefresh
@@ -221,9 +221,9 @@ async function refreshFromFile(credsPath: string): Promise\u003cstring\u003e {
  *   1. Vault — in-app SuperGrok sign-in.
  *   2. Grok CLI file — `~/.grok/auth.json` (or `authFilePath`).
  */
-export async function getXaiOAuthAccessToken(config: ProviderConfig = {}): Promise\u003cstring\u003e {
+export async function getXaiOAuthAccessToken(config: ProviderConfig = {}): Promise<string> {
   const vault = await getVaultOAuthToken(config)
   if (vault) return vault.accessToken
   const credsPath = resolveCredsPath(config['authFilePath'] || undefined)
-  return ensureFresh(credsPath, () =\u003e refreshFromFile(credsPath))
+  return ensureFresh(credsPath, () => refreshFromFile(credsPath))
 }
