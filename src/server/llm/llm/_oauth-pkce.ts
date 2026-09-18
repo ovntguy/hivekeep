@@ -20,12 +20,22 @@
  * own endpoints / client id / scopes / redirect uri via `PkceClient`.
  */
 import { createHash, randomBytes } from 'crypto'
-// PkceClient / PkceTokenResponse are declared in the SDK (single source of
-// truth) so plugin providers can declare an `oauth` descriptor too. The runtime
-// dance (mint/build/exchange) stays host-side, here.
-import type { PkceClient, PkceTokenResponse } from '@hivekeep/sdk'
+// PkceClient / PkceTokenResponse are declared in the SDK so plugin providers
+// can declare an `oauth` descriptor too. The runtime dance stays host-side.
+// `tokenEncoding` is declared here as well so SuperGrok form-urlencoded
+// token requests typecheck even when an older SDK build omits the field.
+import type { PkceClient as SdkPkceClient, PkceTokenResponse } from '@hivekeep/sdk'
 
-export type { PkceClient, PkceTokenResponse }
+export type { PkceTokenResponse }
+
+export interface PkceClient extends SdkPkceClient {
+  /**
+   * How to encode the token-endpoint body. Default `'json'` (Anthropic / Codex).
+   * Standard OIDC servers such as xAI (`auth.x.ai`) require `'form'`
+   * (`application/x-www-form-urlencoded`).
+   */
+  tokenEncoding?: 'json' | 'form'
+}
 
 export interface PkcePair {
   verifier: string
