@@ -51,15 +51,30 @@ export const XAI_PKCE_CLIENT: PkceClient = {
   tokenEncoding: 'form',
 }
 
-function grokAuthCandidates(): string[] {
+/**
+ * Candidate Grok CLI auth.json paths, tried in order: env HOME (macOS /Users
+ * vs the /home/$USER fallback), then USERPROFILE (native Windows — Git Bash
+ * HOME is `/c/Users/...`, which is not a native path), then REAL_HOME
+ * (snap-adjusted). Relative or empty homes are dropped.
+ * @internal exported for tests.
+ */
+export function grokAuthPathCandidates(
+  envHome?: string,
+  userProfile?: string,
+  realHome?: string,
+): string[] {
   const paths: string[] = []
-  for (const home of [process.env.HOME, REAL_HOME]) {
+  for (const home of [envHome, userProfile, realHome]) {
     const base = normalizeAbsoluteHome(home)
     if (!base) continue
     const p = join(base, '.grok', 'auth.json')
     if (!paths.includes(p)) paths.push(p)
   }
   return paths
+}
+
+function grokAuthCandidates(): string[] {
+  return grokAuthPathCandidates(process.env.HOME, process.env.USERPROFILE, REAL_HOME)
 }
 
 const CANDIDATE_PATHS = grokAuthCandidates()

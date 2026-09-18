@@ -18,6 +18,7 @@ Hivekeep ships with built-in providers across six capability families: language 
 | [Kilo Gateway](https://kilo.ai/gateway) | ✅ | | | | | | ✅ |
 | [Ollama Cloud](https://ollama.com/) | ✅ | | | ✅ | | | ✅ |
 | [xAI](https://console.x.ai) | ✅ | | | | | | ✅ |
+| xAI (SuperGrok) | ✅ | | | | | | ❌ (OAuth) |
 | [DeepSeek](https://platform.deepseek.com/api_keys) | ✅ | | | | | | ✅ |
 | [MiniMax](https://platform.minimax.io/user-center/basic-information/interface-key) | ✅ | | | | | | ✅ |
 | [Kimi (Moonshot)](https://platform.moonshot.ai/console/api-keys) | ✅ | | | | | | ✅ |
@@ -90,14 +91,14 @@ A configured search provider is automatically picked up by the `web_search` tool
 
 ### Subscription providers: sign in without a CLI
 
-The subscription providers, **Anthropic (Claude Max)** and **OpenAI (Codex CLI)**, bill against your existing Claude or ChatGPT plan instead of a metered API key. Both support two connection methods, chosen with a toggle in the **Add provider** dialog:
+The subscription providers, **Anthropic (Claude Max)**, **OpenAI (Codex CLI)**, and **xAI (SuperGrok)**, bill against your existing Claude, ChatGPT, or SuperGrok / X Premium+ plan instead of a metered API key. All three support two connection methods, chosen with a toggle in the **Add provider** dialog:
 
-- **Sign in** (no CLI needed): pick "Sign in", click the sign-in button, approve in the browser tab that opens, then paste back the authorization code the page shows. Hivekeep completes the OAuth PKCE exchange and stores the resulting tokens in its **encrypted vault**, refreshing them automatically. This is the recommended path and requires nothing installed on the server. For Codex, copy the code (or the whole `http://localhost:1455/...` address the page redirects to) and paste it back; Hivekeep pulls the code out.
-- **Credentials file**: if you already use the official CLI on the same machine (`claude` / `codex`), leave the toggle on "Credentials file" and Hivekeep reads its OAuth tokens from `~/.claude/.credentials.json` / `~/.codex/auth.json` (an explicit path override is available for non-standard environments). Existing setups keep working with no change.
+- **Sign in** (no CLI needed): pick "Sign in", click the sign-in button, approve in the browser tab that opens, then paste back the authorization code the page shows. Hivekeep completes the OAuth PKCE exchange and stores the resulting tokens in its **encrypted vault**, refreshing them automatically. This is the recommended path and requires nothing installed on the server. For Codex and SuperGrok, copy the code (or the whole loopback address the page redirects to — `http://localhost:1455/...` for Codex, `http://127.0.0.1:56121/...` for SuperGrok) and paste it back; Hivekeep pulls the code out.
+- **Credentials file**: if you already use the official CLI on the same machine (`claude` / `codex` / `grok`), leave the toggle on "Credentials file" and Hivekeep reads its OAuth tokens from `~/.claude/.credentials.json` / `~/.codex/auth.json` / `~/.grok/auth.json` (an explicit path override is available for non-standard environments). On Windows the Grok CLI file is also looked up under `%USERPROFILE%\.grok\auth.json`. Existing setups keep working with no change.
 
 Both methods feed the same provider. Tokens obtained via "Sign in" never touch the CLI files: they live only in the vault, and are removed when the provider is deleted.
 
-You can also just **ask Queenie** (the configurator Agent) to connect Claude Max or Codex: she opens the sign-in as an in-chat card (the same button + paste-the-code step), so you never have to leave the conversation.
+You can also just **ask Queenie** (the configurator Agent) to connect Claude Max, Codex, or SuperGrok: she opens the sign-in as an in-chat card (the same button + paste-the-code step), so you never have to leave the conversation. SuperGrok OAuth API access may be restricted to certain tiers — if listing models fails after sign-in, use the xAI API-key provider instead.
 
 Codex does not need its CLI model cache (`~/.codex/models_cache.json`): Hivekeep fetches your live, per-account model catalog straight from the Codex backend (the same source the CLI uses), so it always lists the models your plan actually supports. The CLI cache and a small built-in list are only fallbacks for when that request can't be made. Per-model metadata is enriched from the [Model Registry](/docs/providers/model-registry/).
 

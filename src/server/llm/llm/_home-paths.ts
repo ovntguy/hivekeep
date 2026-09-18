@@ -16,11 +16,17 @@ import { isAbsolute, normalize } from 'path'
 function getRealHome(): string {
   // REAL_HOME is set by some snap environments.
   if (process.env.REAL_HOME) return process.env.REAL_HOME
+  // Native Windows: USERPROFILE is the real user home. HOME may be Git Bash
+  // (`/c/Users/...`) or unset; never invent `/home/$USER` here.
+  if (process.platform === 'win32') {
+    const profile = process.env.USERPROFILE?.trim()
+    if (profile) return profile
+  }
   // Fall back to HOME, but strip snap paths.
   const home = process.env.HOME ?? ''
   const snapMatch = home.match(/^(\/home\/[^/]+)\/snap\//)
   if (snapMatch) return snapMatch[1]!
-  // Last resort: construct from USER.
+  // Last resort: construct from USER (Unix only).
   if (process.env.USER) return `/home/${process.env.USER}`
   return home
 }

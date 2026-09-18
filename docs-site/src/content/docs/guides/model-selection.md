@@ -133,6 +133,13 @@ Anthropic models are the most thoroughly tested with Hivekeep's tool system. The
 OpenAI models occasionally fall into "text mode" on complex multi-step tool chains. If this happens, add stronger execution instructions to your system prompt (see the EXEC pattern above).
 :::
 
+### xAI
+
+1. Get an API key from [console.x.ai](https://console.x.ai)
+2. Add as a provider in Hivekeep
+
+xAI also supports **OAuth via SuperGrok** (or X Premium+): in-app sign-in, no API key. SuperGrok OAuth API access may be restricted to certain tiers — if listing models fails after sign-in, use the API-key provider instead.
+
 ### Self-hosted & OpenAI-compatible (Ollama, vLLM, llama.cpp, LM Studio, NewAPI, LiteLLM)
 
 Use the built-in **OpenAI-compatible** provider to point Hivekeep at any OpenAI-style endpoint:

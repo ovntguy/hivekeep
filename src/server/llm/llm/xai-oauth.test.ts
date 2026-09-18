@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { parseGrokAuthFile, XAI_PKCE_CLIENT } from './_xai-oauth-auth'
+import { grokAuthPathCandidates, parseGrokAuthFile, XAI_PKCE_CLIENT } from './_xai-oauth-auth'
 import { xaiOAuthProvider } from './xai-oauth'
 import { fetchXaiChatModels, mapModel } from './xai'
 
@@ -23,6 +23,35 @@ describe('xaiOAuthProvider declaration', () => {
     expect(xaiOAuthProvider.defaultMaxTools).toBe(128)
     expect(xaiOAuthProvider.oauth?.redirectStyle).toBe('loopback')
     expect(xaiOAuthProvider.oauth?.client).toBe(XAI_PKCE_CLIENT)
+  })
+})
+
+describe('grokAuthPathCandidates', () => {
+  it('tries env HOME, then USERPROFILE, then REAL_HOME', () => {
+    expect(grokAuthPathCandidates('/home/snap', '/Users/win', '/home/real')).toEqual([
+      '/home/snap/.grok/auth.json',
+      '/Users/win/.grok/auth.json',
+      '/home/real/.grok/auth.json',
+    ])
+  })
+
+  it('dedupes when homes match', () => {
+    expect(grokAuthPathCandidates('/home/u', '/home/u', '/home/u')).toEqual(['/home/u/.grok/auth.json'])
+  })
+
+  it('drops relative or empty homes and still includes USERPROFILE', () => {
+    expect(grokAuthPathCandidates(undefined, '/Users/win', '/home/u')).toEqual([
+      '/Users/win/.grok/auth.json',
+      '/home/u/.grok/auth.json',
+    ])
+    expect(grokAuthPathCandidates('relative/path', undefined, '/home/u')).toEqual([
+      '/home/u/.grok/auth.json',
+    ])
+  })
+
+  it('never emits a relative candidate', () => {
+    expect(grokAuthPathCandidates('relative/env', 'also/relative', undefined)).toEqual([])
+    expect(grokAuthPathCandidates(undefined, undefined, undefined)).toEqual([])
   })
 })
 

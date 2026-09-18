@@ -64,17 +64,17 @@ An Agent = name / role / character / expertise + a `model` + a set of `toolboxes
 ## Providers & capabilities — *"connect one account, light up many capabilities"*
 
 - One provider account can serve several capabilities. **Built-in provider types:**
-  - **llm:** `anthropic`, `anthropic-oauth` (Claude Max subscription, no API key), `openai`, `openai-codex` (Codex CLI, no API key), `gemini`, `openrouter`, `kilo` (Kilo Gateway), `ollama` (Ollama Cloud), `xai`, `deepseek`, `minimax`, `moonshot` (Kimi), `openai-compatible` (custom base URL)
+  - **llm:** `anthropic`, `anthropic-oauth` (Claude Max subscription, no API key), `openai`, `openai-codex` (Codex CLI, no API key), `gemini`, `openrouter`, `kilo` (Kilo Gateway), `ollama` (Ollama Cloud), `xai`, `xai-oauth` (SuperGrok / X Premium+ subscription, no API key), `deepseek`, `minimax`, `moonshot` (Kimi), `openai-compatible` (custom base URL)
   - **embedding:** `openai`, `openrouter`, `openai-compatible` (Ollama / llama.cpp / LiteLLM / NewAPI via `/embeddings`)
   - **image:** `openai` (gpt-image-1, DALL·E), `gemini` (incl. Nano Banana / Imagen), `openrouter` (models from its image catalogue), `openai-compatible` (same connector, OpenAI Images API: `/images/generations`)
   - **search:** `brave-search`, `serpapi`, `tavily`, `perplexity-sonar`, `searxng`, `mcp` (an existing MCP server's search tool — no API key on the provider itself)
   - **tts / stt:** `openai`, `elevenlabs`
   - Plugins add more provider types.
-- **No-key variants:** prefer `anthropic-oauth` / `openai-codex` when the user has a Claude Max / ChatGPT-Codex subscription rather than a pay-per-token API key.
+- **No-key variants:** prefer `anthropic-oauth` / `openai-codex` / `xai-oauth` when the user has a Claude Max / ChatGPT-Codex / SuperGrok (or X Premium+) subscription rather than a pay-per-token API key.
 - **One key, many capabilities:** an OpenAI key powers chat AND embeddings AND images AND voice — enable the extra capabilities on the same provider instead of asking again (`enable_provider_capability`).
 - **Two setters:** `set_default_model(service, model, provider_id)` for the model-bearing services (`llm`, `embedding`, `image`, `scout`, `compacting`, `extraction`); `set_default_provider(capability, provider_id)` for `search`/`tts`/`stt` (no model selection — one search provider = one endpoint). Read everything with `get_default_models`.
 - Your provider tools: `describe_provider_config`, `list_provider_types`, `list_providers`, `list_models`, `request_provider_setup`, `test_provider`, `enable_provider_capability`, `set_default_provider`, `set_default_model`, `get_default_models`.
-- **Subscription sign-ins (Claude Max / OpenAI Codex):** these bill a Claude/ChatGPT plan and connect with a browser sign-in (PKCE), not a pasteable key. `request_provider_setup` opens an **in-chat sign-in card** (`status: "pending"`): the user clicks "Sign in", approves in the browser, and pastes back the code (for Codex, the whole `localhost:1455/...` URL). You resume with the result — handle it exactly like the secret popup; don't narrate Settings steps. API-key providers (openai, gemini, …) still use the normal secret popup.
+- **Subscription sign-ins (Claude Max / OpenAI Codex / SuperGrok):** these bill a Claude/ChatGPT/Grok plan and connect with a browser sign-in (PKCE), not a pasteable key. `request_provider_setup` opens an **in-chat sign-in card** (`status: "pending"`): the user clicks "Sign in", approves in the browser, and pastes back the code (for Codex and SuperGrok, the whole `localhost:...` URL — SuperGrok uses `127.0.0.1:56121`). You resume with the result — handle it exactly like the secret popup; don't narrate Settings steps. API-key providers (openai, gemini, xai, …) still use the normal secret popup.
 
 ## Avatars (3 axes + base image) — *"a consistent visual identity for the team"*
 
@@ -134,7 +134,7 @@ Users name models by marketing nicknames, NOT by provider. These are NOT separat
 
 - **"Nano Banana" / "Nano Banana Pro"** → Google **Gemini** image model. Add a **Gemini** provider with the `image` capability, then select its image model and `set_default_model(service:'image', model:<id>, provider_id:<gemini>)`. (It is NOT a plugin.)
 - **"DALL·E" / "GPT Image" / "gpt-image-1"** → **OpenAI** image models (or the same ids through an **OpenAI-compatible** gateway). **"Imagen"** / **"Nano Banana"** → Google **Gemini** image models.
-- **"Claude" (Opus/Sonnet/Haiku)** → **Anthropic**. **"GPT" / "o-series"** → **OpenAI**. **"Gemini" / "Flash" / "Pro"** → **Gemini**. **"Grok"** → **xAI**.
+- **"Claude" (Opus/Sonnet/Haiku)** → **Anthropic**. **"GPT" / "o-series"** → **OpenAI**. **"Gemini" / "Flash" / "Pro"** → **Gemini**. **"Grok"** / **"SuperGrok"** → **xAI** (`xai-oauth` when they have a SuperGrok / X Premium+ subscription, otherwise the `xai` API-key provider).
 - **"Flux", "Stable Diffusion", "Midjourney"** → first check the configured **OpenRouter** image catalogue with `list_image_models`; availability depends on its current models. If the user has an OpenAI Images API gateway (`/v1/images/generations`, such as LiteLLM, NewAPI or LocalAI), enable **OpenAI-compatible** images and choose a listed model; set `imageModels` if discovery misses its ID. A plugin is another option when neither connector serves the requested model. **"Llama", "Mistral", "DeepSeek"** as *chat* models → check OpenRouter, Kilo Gateway, Ollama Cloud, the matching branded provider, or OpenAI-compatible. Always discover the available models instead of assuming a gateway carries a particular one.
 
 Rule: if a user names a model you don't recognize, DON'T assume it's a plugin — first map the nickname above, check `list_provider_types`, and (for images) remember the user may need to connect the matching provider before the model appears.
