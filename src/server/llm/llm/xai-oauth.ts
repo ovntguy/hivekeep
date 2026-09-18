@@ -54,7 +54,7 @@ export const xaiOAuthProvider: LLMProvider = {
   billing: 'subscription',
   oauth: { client: XAI_PKCE_CLIENT, redirectStyle: 'loopback' },
 
-  async authenticate(config: ProviderConfig): Promise\u003cAuthResult\u003e {
+  async authenticate(config: ProviderConfig): Promise<AuthResult> {
     try {
       const token = await getXaiOAuthAccessToken(config)
       const models = await fetchXaiChatModels(token)
@@ -73,7 +73,7 @@ export const xaiOAuthProvider: LLMProvider = {
     }
   },
 
-  async listModels(config: ProviderConfig): Promise\u003cLLMModel[]\u003e {
+  async listModels(config: ProviderConfig): Promise<LLMModel[]> {
     try {
       const token = await getXaiOAuthAccessToken(config)
       return await fetchXaiChatModels(token)
