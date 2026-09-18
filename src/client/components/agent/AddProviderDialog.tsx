@@ -24,23 +24,21 @@ import type { ProviderType } from '@/shared/types'
 const CREDENTIALS_PATH_PLACEHOLDERS: Record<string, string> = {
   'anthropic-oauth': '~/.claude/.credentials.json',
   'openai-codex': '~/.codex/auth.json',
+  'xai-oauth': '~/.grok/auth.json',
 }
 
 /**
- * Subscription providers that support the in-app OAuth "Sign in" flow (PKCE),
- * so a user with no CLI installed can still connect. Mirrors the server-side
- * registry in `routes/provider-oauth.ts` (OAUTH_PROVIDERS). When sign-in is
- * available the Add dialog offers a "Sign in" / "Credentials file" toggle.
+ * Fallback list of subscription providers that support in-app OAuth while the
+ * live catalogue (which carries `oauth.redirectStyle`) is still loading.
+ * The dialog prefers the catalogue declaration once it arrives.
  */
-const SIGN_IN_PROVIDER_TYPES = new Set<string>(['anthropic-oauth', 'openai-codex'])
+const SIGN_IN_PROVIDER_TYPES = new Set<string>(['anthropic-oauth', 'openai-codex', 'xai-oauth'])
 
 /**
- * Sign-in providers whose OAuth app redirects to a fixed loopback URL
- * (`http://localhost:1455/...`) instead of showing the code on a page. That
- * page fails to load when Hivekeep runs on a different machine — the code is in
- * the browser's address bar, so we tell the user to paste the whole URL.
+ * Fallback loopback paste types used before the catalogue loads. Codex and
+ * SuperGrok both redirect to a localhost URL the Hivekeep server does not serve.
  */
-const LOOPBACK_PASTE_TYPES = new Set<string>(['openai-codex'])
+const LOOPBACK_PASTE_TYPES = new Set<string>(['openai-codex', 'xai-oauth'])
 
 /** Control-only config keys driven by the auth-mode toggle, never typed by the
  *  user, so they're filtered out of the dynamic field list. */
@@ -88,7 +86,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSaved, provider, prov
    *  payload submitted to the server. */
   const [configValues, setConfigValues] = useState<Record<string, string>>({})
 
-  // ─── In-app OAuth sign-in (CLI-free) ───────────────────────────────────────
+  // ─── In-app OAuth sign-in (CLI-free) ────────────────────────────────────────────
   // 'signin' uses the PKCE paste-code flow; 'cli' uses the credentials file.
   const [authMode, setAuthMode] = useState<'signin' | 'cli'>('signin')
   const [signInUrl, setSignInUrl] = useState('')
@@ -212,10 +210,12 @@ export function ProviderFormDialog({ open, onOpenChange, onSaved, provider, prov
   const hasOptionalApiKey = catalogue.withOptionalApiKey.includes(providerType)
   const apiKeyUrl = catalogue.apiKeyUrls[providerType]
 
-  // Sign-in is only offered when creating a row for a sign-in-capable type.
-  const supportsSignIn = !isEditing && SIGN_IN_PROVIDER_TYPES.has(providerType)
+  // Sign-in is offered when the selected type declares `oauth` (catalogue),
+  // falling back to the known built-in set while the catalogue is loading.
+  const oauthMeta = catalogue.entries.find((e) => e.type === providerType)?.oauth
+  const supportsSignIn = !isEditing && (oauthMeta != null || SIGN_IN_PROVIDER_TYPES.has(providerType))
   const inSignInMode = supportsSignIn && authMode === 'signin'
-  const isLoopbackPaste = LOOPBACK_PASTE_TYPES.has(providerType)
+  const isLoopbackPaste = oauthMeta?.redirectStyle === 'loopback' || LOOPBACK_PASTE_TYPES.has(providerType)
   const providerDisplayName = catalogue.displayNames[providerType] ?? providerType
 
   const handleStartSignIn = async () => {
