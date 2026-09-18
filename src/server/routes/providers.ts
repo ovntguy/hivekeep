@@ -104,6 +104,12 @@ function readConfigSchema(type: string): ConfigField[] | undefined {
   return [...provider.configSchema]
 }
 
+function readOAuth(type: string): { redirectStyle: 'page' | 'loopback' } | undefined {
+  const oauth = getLLMProvider(type)?.oauth
+  if (!oauth) return undefined
+  return { redirectStyle: oauth.redirectStyle }
+}
+
 // GET /api/providers/types — list all available provider types (built-in + plugin)
 providerRoutes.get('/types', async (c) => {
   const builtinTypes = Object.entries(PROVIDER_META).map(([type, meta]) => ({
@@ -118,6 +124,7 @@ providerRoutes.get('/types', async (c) => {
     brandColor: (meta as any).brandColor,
     source: 'builtin' as const,
     configSchema: readConfigSchema(type),
+    oauth: readOAuth(type),
   }))
 
   const pluginMeta = getPluginProviderMeta()
@@ -133,6 +140,7 @@ providerRoutes.get('/types', async (c) => {
     brandColor: meta.brandColor,
     source: 'plugin' as const,
     configSchema: readConfigSchema(type),
+    oauth: readOAuth(type),
   }))
 
   return c.json({ types: [...builtinTypes, ...pluginTypes] })
