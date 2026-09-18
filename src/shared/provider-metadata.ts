@@ -24,7 +24,7 @@ export interface ProviderMeta {
   readonly lobehubIcon?: string
   /**
    * Secondary fallback icon from react-icons, used when the brand isn't
-   * in the Lobehub whitelist. Format: `"<collection>/<ComponentName>"`
+   * in the Lobehub whitelist. Format: `"\u003ccollection\u003e/\u003cComponentName\u003e"`
    * (e.g. `"si/SiBrave"`, `"si/SiKagi"`). Resolution order: lobehubIcon
    * (when in whitelist) → reactIcon → generic chip icon.
    */
@@ -47,6 +47,7 @@ export const PROVIDER_META = {
   kilo:               { capabilities: ['llm'],                       displayName: 'Kilo Gateway',           reactIcon: 'lu/LuRoute', brandColor: '#7C3AED', apiKeyUrl: 'https://kilo.ai/gateway' },
   ollama:             { capabilities: ['llm', 'search'],             displayName: 'Ollama Cloud',           lobehubIcon: 'Ollama', apiKeyUrl: 'https://ollama.com/settings/keys' },
   xai:                { capabilities: ['llm'],                       displayName: 'xAI',                    lobehubIcon: 'XAI',       apiKeyUrl: 'https://console.x.ai' },
+  'xai-oauth':        { capabilities: ['llm'],                       displayName: 'xAI (SuperGrok)',        lobehubIcon: 'XAI',       noApiKey: true },
   deepseek:           { capabilities: ['llm'],                       displayName: 'DeepSeek',               lobehubIcon: 'DeepSeek',  apiKeyUrl: 'https://platform.deepseek.com/api_keys' },
   minimax:            { capabilities: ['llm'],                       displayName: 'MiniMax',                lobehubIcon: 'Minimax',   apiKeyUrl: 'https://platform.minimax.io/user-center/basic-information/interface-key' },
   moonshot:           { capabilities: ['llm'],                       displayName: 'Kimi',                   lobehubIcon: 'Kimi',      apiKeyUrl: 'https://platform.moonshot.ai/console/api-keys' },
@@ -57,6 +58,6 @@ export const PROVIDER_META = {
   'perplexity-sonar': { capabilities: ['search'],                    displayName: 'Perplexity Sonar',       lobehubIcon: 'Perplexity', apiKeyUrl: 'https://www.perplexity.ai/settings/api' },
   'searxng':          { capabilities: ['search'],                    displayName: 'SearXNG',                reactIcon: 'si/SiSearxng', brandColor: '#3050FF', noApiKey: true },
   'elevenlabs':       { capabilities: ['tts', 'stt'],                displayName: 'ElevenLabs',             lobehubIcon: 'ElevenLabs', apiKeyUrl: 'https://elevenlabs.io/app/settings/api-keys' },
-} as const satisfies Record<string, ProviderMeta>
+} as const satisfies Record\u003cstring, ProviderMeta\u003e
 
 export type ProviderType = keyof typeof PROVIDER_META

@@ -3,7 +3,7 @@
  *
  * Underscore-prefixed so the provider registry's `import.meta.glob` skips it.
  * Keeping this in one place avoids the three credential/cache path resolvers
- * (openai-codex, _codex-auth, _anthropic-oauth-auth) drifting apart.
+ * (openai-codex, _codex-auth, _anthropic-oauth-auth, _xai-oauth-auth) drifting apart.
  */
 import { isAbsolute, normalize } from 'path'
 
