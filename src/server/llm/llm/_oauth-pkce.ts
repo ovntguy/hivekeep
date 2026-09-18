@@ -3,9 +3,10 @@
  *
  * This is the PKCE counterpart to `src/server/services/oauth.ts` (which is a
  * confidential-client flow driven by an `OAuthProfile` and a client secret).
- * The subscription LLM providers — Anthropic (Claude Max) and OpenAI (Codex) —
- * are *public clients*: they ship a fixed `client_id` and have NO client
- * secret, authenticating the token exchange with a `code_verifier` instead.
+ * The subscription LLM providers — Anthropic (Claude Max), OpenAI (Codex),
+ * and xAI (SuperGrok) — are *public clients*: they ship a fixed `client_id`
+ * and have NO client secret, authenticating the token exchange with a
+ * `code_verifier` instead.
  *
  * The host runs the dance in a CLI-free "paste the code" shape:
  *   1. `generatePkce()` mints a verifier + challenge.
@@ -101,6 +102,29 @@ interface RawTokenResponse {
   [key: string]: unknown
 }
 
+/**
+ * Encode a token-endpoint body the way the PKCE client declared.
+ * Anthropic / Codex speak JSON; standard OIDC (xAI) speaks form-urlencoded.
+ */
+export function encodeTokenRequest(client: PkceClient, fields: Record<string, string>): {
+  headers: Record<string, string>
+  body: string
+} {
+  if (client.tokenEncoding === 'form') {
+    return {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: new URLSearchParams(fields).toString(),
+    }
+  }
+  return {
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(fields),
+  }
+}
+
 /** Exchange an authorization code (+ verifier) for tokens. */
 export async function exchangePkceCode(opts: {
   client: PkceClient
@@ -120,10 +144,11 @@ export async function exchangePkceCode(opts: {
   // OpenAI/Codex rejects it with a 400 invalid_request.
   if (opts.state && opts.client.includeStateInExchange) body.state = opts.state
 
+  const encoded = encodeTokenRequest(opts.client, body)
   const res = await fetch(opts.client.tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
+    headers: encoded.headers,
+    body: encoded.body,
   })
   const text = await res.text()
   if (!res.ok) {
