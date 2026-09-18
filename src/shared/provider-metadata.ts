@@ -24,7 +24,7 @@ export interface ProviderMeta {
   readonly lobehubIcon?: string
   /**
    * Secondary fallback icon from react-icons, used when the brand isn't
-   * in the Lobehub whitelist. Format: `"\u003ccollection\u003e/\u003cComponentName\u003e"`
+   * in the Lobehub whitelist. Format: `"<collection>/<ComponentName>"`
    * (e.g. `"si/SiBrave"`, `"si/SiKagi"`). Resolution order: lobehubIcon
    * (when in whitelist) → reactIcon → generic chip icon.
    */
@@ -58,6 +58,6 @@ export const PROVIDER_META = {
   'perplexity-sonar': { capabilities: ['search'],                    displayName: 'Perplexity Sonar',       lobehubIcon: 'Perplexity', apiKeyUrl: 'https://www.perplexity.ai/settings/api' },
   'searxng':          { capabilities: ['search'],                    displayName: 'SearXNG',                reactIcon: 'si/SiSearxng', brandColor: '#3050FF', noApiKey: true },
   'elevenlabs':       { capabilities: ['tts', 'stt'],                displayName: 'ElevenLabs',             lobehubIcon: 'ElevenLabs', apiKeyUrl: 'https://elevenlabs.io/app/settings/api-keys' },
-} as const satisfies Record\u003cstring, ProviderMeta\u003e
+} as const satisfies Record<string, ProviderMeta>
 
 export type ProviderType = keyof typeof PROVIDER_META
