@@ -29,7 +29,8 @@ export async function migrateModelProviders(): Promise<void> {
   const typeToProviderId = new Map<string, string>()
   for (const p of allProviders) {
     // anthropic-oauth should match the 'anthropic' heuristic
-    const normalizedType = p.type === 'anthropic-oauth' ? 'anthropic' : p.type
+    const normalizedType =
+      p.type === 'anthropic-oauth' ? 'anthropic' : p.type === 'xai-oauth' ? 'xai' : p.type
     // First provider of each type wins (most installations have one per type)
     if (!typeToProviderId.has(normalizedType)) {
       typeToProviderId.set(normalizedType, p.id)
