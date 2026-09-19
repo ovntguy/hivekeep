@@ -240,7 +240,7 @@ function withExtraBody(
   params: ChatCompletionCreateParamsStreaming,
   config: ProviderConfig,
 ): ChatCompletionCreateParamsStreaming {
-  return applyExtraBody(params, parseExtraBody(config['extraBody'])) as ChatCompletionCreateParamsStreaming
+  return applyExtraBody(params, parseExtraBody(config['extraBody'])) as unknown as ChatCompletionCreateParamsStreaming
 }
 
 function createClient(config: ProviderConfig): OpenAI {
