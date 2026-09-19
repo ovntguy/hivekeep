@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/client/components/ui/input'
+import { Textarea } from '@/client/components/ui/textarea'
 import { PasswordInput } from '@/client/components/ui/password-input'
 import { Button } from '@/client/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/client/components/ui/select'
@@ -646,7 +647,8 @@ export function ProviderFormDialog({ open, onOpenChange, onSaved, provider, prov
         : [{ key: 'apiKey', type: 'secret' as const, label: t('onboarding.providers.apiKey'), required: true }]
       ).map((field) => {
         const isSecret = field.type === 'secret'
-        const Tag = isSecret ? PasswordInput : Input
+        const isMultiline = field.key === 'extraBody'
+        const Tag = isSecret ? PasswordInput : isMultiline ? Textarea : Input
         return (
           <FormField
             key={field.key}
@@ -669,9 +671,10 @@ export function ProviderFormDialog({ open, onOpenChange, onSaved, provider, prov
               // owns its own type ('password' vs 'text' driven by the
               // eye toggle) and explicitly Omit<…,'type'>s it from its
               // public surface — passing it here defeats the masking.
-              {...(isSecret ? {} : { type: field.type === 'url' ? 'url' : 'text' })}
+              {...(isSecret || isMultiline ? {} : { type: field.type === 'url' ? 'url' : 'text' })}
+              {...(isMultiline ? { rows: 5, className: 'font-mono text-xs' } : {})}
               value={configValues[field.key] ?? ''}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
                 setConfigValues((v) => ({ ...v, [field.key]: e.target.value }))
                 resetTest()
               }}

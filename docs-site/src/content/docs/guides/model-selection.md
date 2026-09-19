@@ -140,6 +140,7 @@ Use the built-in **OpenAI-compatible** provider to point Hivekeep at any OpenAI-
 1. Add an **OpenAI-compatible** provider in Hivekeep
 2. Set the **Base URL** to your endpoint, including the version path. For Ollama: `http://localhost:11434/v1` (from Docker: `http://host.docker.internal:11434/v1`). After `ollama pull llama3.3:70b`, the model appears in the list.
 3. Set the API key only if your server requires one (local servers usually don't)
+4. Optional: **Extra request body (JSON)** for llama.cpp / `llama-server` sampling (`dry_*`, `repeat_penalty`, `top_k`, `min_p`, …). Hivekeep still owns `temperature` (see `TOOLS_TEMPERATURE`) and the chat payload. Do not paste `prompt` here.
 
 The same connector also covers **embeddings** (`/embeddings`) and **image generation** when the endpoint implements the OpenAI Images API (`/images/generations` — LiteLLM, NewAPI, LocalAI). Stock Ollama / llama.cpp / vLLM typically do not; see [OpenAI-compatible image gaps](/docs/providers/supported/#openai-compatible-image-gaps).
 
