@@ -7,6 +7,7 @@ import { config } from '@/server/config'
 import { createLogger } from '@/server/logger'
 import { sseManager } from '@/server/sse/index'
 import type { TerminalSessionDTO } from '@/shared/types'
+import { defaultTerminalShellBinary } from '@/server/services/host-platform'
 
 const log = createLogger('terminal')
 
@@ -44,7 +45,7 @@ const log = createLogger('terminal')
  *  the real config always wins. */
 const TERMINAL_DEFAULTS = {
   enabled: true,
-  shell: process.env.SHELL ?? '/bin/bash',
+  shell: defaultTerminalShellBinary(),
   scrollbackKb: 256,
   detachedTtlSec: 0,
   maxSessions: 10,

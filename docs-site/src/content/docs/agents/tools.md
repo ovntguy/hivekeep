@@ -27,7 +27,7 @@ Agents interact with the world through **tools**: functions they can call during
 
 | Tool | Description |
 |---|---|
-| `web_search` | Search the web (provider configurable per Agent) |
+| `web_search` | Search the web (Brave, Tavily, SerpAPI, Perplexity, SearXNG, or an MCP search tool). Not for looking up today's date — that is already in Context. |
 | `browse_url` | Fetch and read a web page |
 | `extract_links` | Extract all links from a URL |
 | `screenshot_url` | Take a screenshot of a web page |
@@ -247,19 +247,19 @@ These tools operate on the Agent's **workspace**, a per-Agent directory on your 
 :::tip[Tool selection guidance]
 The system prompt includes a tool selection table that steers Agents toward structured file tools over `run_shell`:
 
-- **Search file contents** → `grep` (not `run_shell` with grep/rg)
-- **Find files by pattern** → `list_directory` with pattern (not `run_shell` with find/ls)
+- **Search file contents** → `grep` (not `run_shell` with grep/rg/Select-String)
+- **Find files by pattern** → `list_directory` with pattern (not `run_shell` with find/ls/Get-ChildItem)
 - **Single text replacement** → `edit_file` (not `run_shell` with sed/awk)
 - **Replace all occurrences** → `edit_file` with `replaceAll=true`
 - **Multiple edits, same file** → `multi_edit` (not sequential `edit_file` calls)
-- **Git, builds, tests** → `run_shell`
+- **Git, builds, tests, OS admin** → `run_shell` (PowerShell by default on Windows; bash on Linux/macOS)
 :::
 
 ### System & Advanced
 
 | Tool | Description |
 |---|---|
-| `run_shell` | Execute a shell command (main + sub-agent) |
+| `run_shell` | Execute a command (main + sub-agent). On Windows 11 the default interpreter is PowerShell (`pwsh` if installed, else Windows PowerShell 5.1); pass `shell` (`powershell` / `pwsh` / `cmd` / `bash`) to override. On Linux/macOS the default is bash. |
 | `http_request` | Make HTTP requests to external APIs |
 | `get_platform_config` | Read current Hivekeep configuration (sensitive values redacted) |
 | `get_platform_logs` | View Hivekeep platform logs (dangerous; grant via toolbox) |
@@ -306,6 +306,8 @@ Custom tool execution timeout is configurable via environment variables:
 Per-invocation timeout values passed by the Agent are clamped between 1 second and the server maximum.
 
 ## Tool configuration
+
+The chat composer tools badge shows **granted / max** for the selected model (for example `48/128` on OpenAI, `48/512` on Anthropic). The cap is the same number the engine uses: a per-model override when the catalogue declares one, otherwise the provider default (`128` for OpenAI-family, `512` for Anthropic, `0` when the model cannot call tools). Granting more than the cap still lists every tool in the badge modal; extras are dropped on each turn.
 
 Tool access is governed by **toolboxes**: the single tool-grant primitive for both main Agents and tasks, across all four tool sources (native, plugin, MCP, custom). There is no per-Agent deny-list, no MCP access gate, and no capability flags.
 

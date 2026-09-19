@@ -169,6 +169,20 @@ export const BUILTIN_TOOLBOXES: readonly BuiltinToolboxDef[] = [
     ],
   },
   {
+    name: 'windows',
+    description:
+      'Windows 11 host operations: system info, HTTP, and web docs. Command line is the core `run_shell` tool (PowerShell by default on this OS) — this toolbox adds host diagnostics and lookup around it. Grant to Agents that administer the Windows machine; every Agent already knows Windows CLI via the Environment prompt.',
+    toolNames: [
+      'get_system_info',
+      'http_request',
+      'web_search',
+      'browse_url',
+      'extract_links',
+      'screenshot_url',
+      'scout',
+    ],
+  },
+  {
     name: 'configurator',
     description:
       "Platform configuration set for the onboarding guide (Queenie): connect/test AI providers (secure popup), set defaults, configure channels, customize the avatar style, edit the global prompt, manage contacts/memory, set up email triggers, and create the user's first Agents.",
@@ -445,10 +459,9 @@ export function resolveToolboxNames(ids: string[]): string[] {
 // ─── Seeding ─────────────────────────────────────────────────────────────────────
 
 /**
- * Idempotently upsert the 5 built-in toolboxes (code / research / ops / all /
- * scout). Matched by `name`. Built-in rows are kept in sync with the
- * definitions above (toolNames / description refreshed) and flagged builtin=1.
- * Safe to call on every boot.
+ * Idempotently upsert the built-in toolboxes. Matched by `name`. Built-in rows
+ * are kept in sync with the definitions above (toolNames / description
+ * refreshed) and flagged builtin=1. Safe to call on every boot.
  */
 export function seedBuiltinToolboxes(): void {
   const now = new Date()

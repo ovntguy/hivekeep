@@ -27,6 +27,8 @@ interface AgentToolsModalProps {
   /** The agent's RESOLVED toolset (GET /agents/:id/tools) — the names define
    *  which catalog entries are shown. */
   tools: AgentToolInfo[]
+  /** Effective per-request tool cap for the agent's current model. */
+  maxTools?: number
   /** Variant label — quick sessions expose a reduced set. */
   isQuickSession?: boolean
   /** Opens the agent's tools management (the Agent form's Tools tab). */
@@ -39,7 +41,7 @@ interface AgentToolsModalProps {
  * toolbox editor and the Agent Tools tab (source/domain collapsible groups,
  * friendly names, provenance), in read-only mode with everything "on".
  */
-export function AgentToolsModal({ open, onOpenChange, agentId, agentName, tools, isQuickSession, onEditTools }: AgentToolsModalProps) {
+export function AgentToolsModal({ open, onOpenChange, agentId, agentName, tools, maxTools, isQuickSession, onEditTools }: AgentToolsModalProps) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const { tools: catalog, isLoading: catalogLoading } = useToolCatalog(agentId)
@@ -83,12 +85,23 @@ export function AgentToolsModal({ open, onOpenChange, agentId, agentName, tools,
           <DialogTitle className="flex items-center gap-2">
             <Wrench className="size-4 text-primary" />
             {t('chat.toolsModal.title', { name: agentName, defaultValue: '{{name}} — tools' })}
-            <Badge variant="secondary" className="ml-1">{tools.length}</Badge>
+            <Badge variant="secondary" className="ml-1">
+              {maxTools != null
+                ? t('chat.toolsBadge.label', { granted: tools.length, max: maxTools })
+                : tools.length}
+            </Badge>
           </DialogTitle>
           <DialogDescription>
             {isQuickSession
               ? t('chat.toolsModal.descriptionQuick', 'Tools exposed in this quick session (session-restricted tools like tasks, crons and inter-agent messaging are excluded).')
               : t('chat.toolsModal.description', 'Every tool currently exposed to this agent, grouped by domain.')}
+            {maxTools === 0
+              ? ` ${t('chat.toolsModal.capUnsupported')}`
+              : maxTools != null && tools.length > maxTools
+                ? ` ${t('chat.toolsModal.capOver', { granted: tools.length, max: maxTools })}`
+                : maxTools != null
+                  ? ` ${t('chat.toolsModal.capHint', { max: maxTools })}`
+                  : null}
           </DialogDescription>
         </DialogHeader>
 

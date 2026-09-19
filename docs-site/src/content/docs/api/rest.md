@@ -273,10 +273,12 @@ See [Providers](/docs/providers/supported/) for the full provider reference.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/mcp-servers` | List MCP server configs |
-| `POST` | `/api/mcp-servers` | Add an MCP server |
+| `GET` | `/api/mcp-servers` | List MCP server configs (stdio or HTTP/SSE; env/header values redacted) |
+| `POST` | `/api/mcp-servers` | Add an MCP server (`transport`: `stdio` / `http` / `sse`) |
 | `PATCH` | `/api/mcp-servers/:id` | Update MCP server |
 | `POST` | `/api/mcp-servers/:id/approve` | Approve an MCP server |
+| `GET` | `/api/mcp-servers/:id/status` | Cached connection status |
+| `POST` | `/api/mcp-servers/:id/test` | Fresh connection test |
 | `DELETE` | `/api/mcp-servers/:id` | Remove MCP server |
 
 ## Cron Jobs

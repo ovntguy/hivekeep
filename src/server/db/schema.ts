@@ -166,9 +166,16 @@ export const agents = sqliteTable('agents', {
 export const mcpServers = sqliteTable('mcp_servers', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  /** Unused (empty) when transport is http/sse. Required for stdio. */
   command: text('command').notNull(),
   args: text('args'), // JSON array
-  env: text('env'), // JSON object
+  env: text('env'), // JSON object (stdio process env; values never sent to the UI)
+  /** 'stdio' | 'http' | 'sse'. Default stdio keeps existing rows local. */
+  transport: text('transport').notNull().default('stdio'),
+  /** Remote MCP endpoint. Required when transport is http/sse. */
+  url: text('url'),
+  /** Extra HTTP headers (JSON object). Values never sent to the UI, same as env. */
+  headers: text('headers'),
   status: text('status').notNull().default('active'), // 'active' | 'pending_approval'
   createdByAgentId: text('created_by_agent_id').references(() => agents.id, { onDelete: 'set null' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),

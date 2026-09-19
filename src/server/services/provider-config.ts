@@ -19,7 +19,7 @@
  *
  * Non-secret fields (baseUrl, region, custom-model lists…) stay inline.
  * Provider types whose `configSchema` declares no `secret` field (e.g. the
- * OAuth-based anthropic-oauth / openai-codex) are left untouched.
+ * OAuth-based anthropic-oauth / openai-codex / xai-oauth) are left untouched.
  */
 
 import { eq } from 'drizzle-orm'

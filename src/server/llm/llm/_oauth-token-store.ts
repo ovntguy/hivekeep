@@ -1,7 +1,7 @@
 /**
  * Vault-backed OAuth token store for CLI-free subscription providers.
  *
- * When a provider (anthropic-oauth / openai-codex) is set up via the in-app
+ * When a provider (anthropic-oauth / openai-codex / xai-oauth) is set up via the in-app
  * "Sign in" flow rather than by reading the CLI's credentials file, its OAuth
  * tokens must live somewhere Hivekeep owns. We store them as a single JSON
  * bundle in the encrypted vault (`vault_secrets`, AES-256-GCM at rest) under a

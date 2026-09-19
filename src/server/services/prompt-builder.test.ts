@@ -197,6 +197,8 @@ describe('buildSystemPrompt', () => {
     const result = buildSystemPrompt(makeParams())
     expect(result).toContain('Current date:')
     expect(result).toContain('Platform: Hivekeep')
+    expect(result).toContain('do not web_search to look them up')
+    expect(result).toContain("Do not web_search for today's date or time")
   })
 
   // --- Initiative ---
@@ -697,6 +699,60 @@ describe('buildSystemPrompt', () => {
       expect(stable).toContain('## Quick session')
       expect(volatile).toContain('## Language')
       expect(volatile).toContain('Current date:')
+    })
+  })
+
+  describe('Windows host environment', () => {
+    const winCtx = {
+      platform: 'win32',
+      arch: 'x64',
+      defaultShell: 'powershell',
+      runtimes: [{ name: 'bun', version: '1.2.0' }, { name: 'git', version: 'git version 2.45' }],
+    }
+
+    it('injects Environment + Windows CLI knowledge for main Agents', () => {
+      const result = buildSystemPrompt(makeParams({ systemContext: winCtx }))
+      expect(result).toContain('## Environment')
+      expect(result).toContain('Windows 11')
+      expect(result).toContain('PowerShell')
+      expect(result).toContain('## Windows CLI')
+      expect(result).toContain('$env:USERPROFILE')
+      expect(result).toContain('run_shell')
+    })
+
+    it('injects the same Windows knowledge for sub-Agents and quick sessions', () => {
+      const sub = buildSystemPrompt(makeParams({
+        isSubAgent: true,
+        taskDescription: 'List services',
+        systemContext: winCtx,
+      }))
+      expect(sub).toContain('## Windows CLI')
+      expect(sub).toContain('Default `run_shell` interpreter: **PowerShell**')
+
+      const quick = buildSystemPrompt(makeParams({
+        isQuickSession: true,
+        systemContext: winCtx,
+      }))
+      expect(quick).toContain('## Windows CLI')
+      expect(quick).toContain('Windows tools are the default')
+    })
+
+    it('keeps bash-oriented Environment copy on Linux', () => {
+      const result = buildSystemPrompt(makeParams({
+        systemContext: { platform: 'linux', arch: 'x64', defaultShell: 'bash', runtimes: [] },
+      }))
+      expect(result).toContain('Default `run_shell` interpreter: **bash**')
+      expect(result).not.toContain('## Windows CLI')
+      expect(result).not.toContain('Windows 11 (native Bun)')
+    })
+
+    it('tells sub-Agents to use Select-Object -Last instead of tail on Windows', () => {
+      const result = buildSystemPrompt(makeParams({
+        isSubAgent: true,
+        taskDescription: 'Run tests',
+        systemContext: winCtx,
+      }))
+      expect(result).toContain('Select-Object -Last 80')
     })
   })
 })

@@ -78,6 +78,7 @@ All configurable values of the platform, grouped by domain. These values are def
 | `tools.temperature` | `TOOLS_TEMPERATURE` | `0` | Sampling temperature applied on tool-enabled turns. Local backends (Ollama, llama.cpp, LM Studio) default to ~0.7-0.8, which makes small models emit unreliable tool-call JSON; a low value steadies it. Reasoning models are exempted automatically (they reject a custom temperature). Set to `off` to defer to the backend default |
 | `shell.defaultTimeoutMs` | `HIVEKEEP_SHELL_TIMEOUT` | `30000` | Default timeout for a `run_shell` command (ms), used when the Agent does not provide a `timeout` |
 | `shell.maxTimeoutMs` | `HIVEKEEP_SHELL_MAX_TIMEOUT` | `600000` | Maximum timeout an Agent can request per `run_shell` call (ms). The tool's `timeout` parameter is capped at this value (10 min by default, raise it for longer test suites/builds) |
+| — | `HIVEKEEP_AUGMENT_PATH` | *(none)* | Extra directories prepended to `PATH` before CLI probing and `run_shell`. Semicolon-separated on Windows, colon-separated on Linux/macOS |
 
 ---
 
@@ -340,7 +341,7 @@ Setting any of them is now a no-op:
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `HIVEKEEP_TERMINAL_ENABLED` | `true` | Kill-switch for the admin web terminal. Set to `false` to disable the feature entirely. |
-| `HIVEKEEP_TERMINAL_SHELL` | `$SHELL`, then `/bin/bash` | Shell binary spawned for each terminal session. |
+| `HIVEKEEP_TERMINAL_SHELL` | `$SHELL`, then PowerShell on Windows (`pwsh` / `powershell.exe`) or `/bin/bash` elsewhere | Shell binary spawned for each terminal session. |
 | `HIVEKEEP_TERMINAL_SCROLLBACK_KB` | `256` | Scrollback kept server-side per session (KB), replayed when a client reattaches. |
 | `HIVEKEEP_TERMINAL_DETACHED_TTL_SEC` | `0` (never) | How long a detached session (no client connected) survives before the shell is killed. `0` = sessions persist until closed from the sidebar or the shell exits. |
 | `HIVEKEEP_TERMINAL_MAX_SESSIONS` | `10` | Hard cap of concurrently running PTY sessions across all users. |

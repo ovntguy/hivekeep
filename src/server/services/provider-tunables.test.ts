@@ -32,6 +32,10 @@ describe('getMaxToolsForProvider', () => {
     expect(getMaxToolsForProvider('openai-codex')).toBe(128)
   })
 
+  it('reads defaultMaxTools from the built-in xAI SuperGrok provider (128)', () => {
+    expect(getMaxToolsForProvider('xai-oauth')).toBe(128)
+  })
+
   it('reads defaultMaxTools from the built-in Anthropic provider (512)', () => {
     expect(getMaxToolsForProvider('anthropic')).toBe(512)
   })
@@ -89,9 +93,10 @@ describe('getMaxToolsForRequest (per-model override)', () => {
 })
 
 describe('providerPriority (auto-resolution tie-breaker)', () => {
-  it('subscription providers (Anthropic OAuth, OpenAI Codex) outrank per-token', () => {
+  it('subscription providers (Anthropic OAuth, OpenAI Codex, SuperGrok) outrank per-token', () => {
     expect(providerPriority('anthropic-oauth')).toBe(1)
     expect(providerPriority('openai-codex')).toBe(1)
+    expect(providerPriority('xai-oauth')).toBe(1)
   })
 
   it('per-token providers (Anthropic key, OpenAI key) sort last', () => {
@@ -106,5 +111,6 @@ describe('providerPriority (auto-resolution tie-breaker)', () => {
   it('subscriptions strictly beat per-token in the sort order', () => {
     expect(providerPriority('anthropic-oauth')).toBeLessThan(providerPriority('anthropic'))
     expect(providerPriority('openai-codex')).toBeLessThan(providerPriority('openai'))
+    expect(providerPriority('xai-oauth')).toBeLessThan(providerPriority('xai'))
   })
 })

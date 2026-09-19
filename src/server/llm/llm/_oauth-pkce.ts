@@ -3,9 +3,10 @@
  *
  * This is the PKCE counterpart to `src/server/services/oauth.ts` (which is a
  * confidential-client flow driven by an `OAuthProfile` and a client secret).
- * The subscription LLM providers — Anthropic (Claude Max) and OpenAI (Codex) —
- * are *public clients*: they ship a fixed `client_id` and have NO client
- * secret, authenticating the token exchange with a `code_verifier` instead.
+ * The subscription LLM providers — Anthropic (Claude Max), OpenAI (Codex),
+ * and xAI (SuperGrok) — are *public clients*: they ship a fixed `client_id`
+ * and have NO client secret, authenticating the token exchange with a
+ * `code_verifier` instead.
  *
  * The host runs the dance in a CLI-free "paste the code" shape:
  *   1. `generatePkce()` mints a verifier + challenge.
@@ -19,12 +20,22 @@
  * own endpoints / client id / scopes / redirect uri via `PkceClient`.
  */
 import { createHash, randomBytes } from 'crypto'
-// PkceClient / PkceTokenResponse are declared in the SDK (single source of
-// truth) so plugin providers can declare an `oauth` descriptor too. The runtime
-// dance (mint/build/exchange) stays host-side, here.
-import type { PkceClient, PkceTokenResponse } from '@hivekeep/sdk'
+// PkceClient / PkceTokenResponse are declared in the SDK so plugin providers
+// can declare an `oauth` descriptor too. The runtime dance stays host-side.
+// `tokenEncoding` is declared here as well so SuperGrok form-urlencoded
+// token requests typecheck even when an older SDK build omits the field.
+import type { PkceClient as SdkPkceClient, PkceTokenResponse } from '@hivekeep/sdk'
 
-export type { PkceClient, PkceTokenResponse }
+export type { PkceTokenResponse }
+
+export interface PkceClient extends SdkPkceClient {
+  /**
+   * How to encode the token-endpoint body. Default `'json'` (Anthropic / Codex).
+   * Standard OIDC servers such as xAI (`auth.x.ai`) require `'form'`
+   * (`application/x-www-form-urlencoded`).
+   */
+  tokenEncoding?: 'json' | 'form'
+}
 
 export interface PkcePair {
   verifier: string
@@ -101,6 +112,29 @@ interface RawTokenResponse {
   [key: string]: unknown
 }
 
+/**
+ * Encode a token-endpoint body the way the PKCE client declared.
+ * Anthropic / Codex speak JSON; standard OIDC (xAI) speaks form-urlencoded.
+ */
+export function encodeTokenRequest(client: PkceClient, fields: Record<string, string>): {
+  headers: Record<string, string>
+  body: string
+} {
+  if (client.tokenEncoding === 'form') {
+    return {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: new URLSearchParams(fields).toString(),
+    }
+  }
+  return {
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(fields),
+  }
+}
+
 /** Exchange an authorization code (+ verifier) for tokens. */
 export async function exchangePkceCode(opts: {
   client: PkceClient
@@ -120,10 +154,11 @@ export async function exchangePkceCode(opts: {
   // OpenAI/Codex rejects it with a 400 invalid_request.
   if (opts.state && opts.client.includeStateInExchange) body.state = opts.state
 
+  const encoded = encodeTokenRequest(opts.client, body)
   const res = await fetch(opts.client.tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
+    headers: encoded.headers,
+    body: encoded.body,
   })
   const text = await res.text()
   if (!res.ok) {
