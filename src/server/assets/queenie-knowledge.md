@@ -71,6 +71,7 @@ An Agent = name / role / character / expertise + a `model` + a set of `toolboxes
   - **tts / stt:** `openai`, `elevenlabs`
   - Plugins add more provider types.
 - **No-key variants:** prefer `anthropic-oauth` / `openai-codex` when the user has a Claude Max / ChatGPT-Codex subscription rather than a pay-per-token API key.
+- **Local sampling extras:** the `openai-compatible` provider has an optional `extraBody` JSON field (llama.cpp DRY / `repeat_penalty` / `top_k` / `min_p`). Only fill it when the user asks to tune a local llama-server. Do not put `temperature` or `prompt` there — Hivekeep owns those for tool-calling turns.
 - **One key, many capabilities:** an OpenAI key powers chat AND embeddings AND images AND voice — enable the extra capabilities on the same provider instead of asking again (`enable_provider_capability`).
 - **Two setters:** `set_default_model(service, model, provider_id)` for the model-bearing services (`llm`, `embedding`, `image`, `scout`, `compacting`, `extraction`); `set_default_provider(capability, provider_id)` for `search`/`tts`/`stt` (no model selection — one search provider = one endpoint). Read everything with `get_default_models`.
 - Your provider tools: `describe_provider_config`, `list_provider_types`, `list_providers`, `list_models`, `request_provider_setup`, `test_provider`, `enable_provider_capability`, `set_default_provider`, `set_default_model`, `get_default_models`.

@@ -111,6 +111,15 @@ const CONFIG_SCHEMA: readonly ConfigField[] = [
     description:
       'Optional. Comma-separated model IDs to advertise as image models, in addition to ids the catalogue heuristic already recognizes (dall-e, gpt-image, flux, sdxl, imagen, …). Leave empty unless your /models listing uses names Hivekeep does not recognize. The endpoint must implement the OpenAI Images API (`/images/generations`).',
   },
+  {
+    key: 'extraBody',
+    type: 'text',
+    label: 'Extra request body (JSON)',
+    required: false,
+    placeholder: '{"dry_multiplier":0.8,"dry_base":1.75,"dry_allowed_length":2,"dry_penalty_last_n":-1}',
+    description:
+      'Optional. JSON object merged into every /chat/completions body (llama.cpp DRY sampling, repeat_penalty, top_k, min_p, …). Host fields win: model, messages, tools, stream, temperature, max_tokens, reasoning_effort. Do not send these to OpenAI/vLLM if the gateway rejects unknown keys. Does not apply to embeddings or images.',
+  },
 ]
 
 // ─── /models payload (subset we read) ────────────────────────────────────────
@@ -169,6 +178,69 @@ function getApiKey(config: ProviderConfig): string {
 
 function authHeaders(apiKey: string): Record<string, string> {
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
+}
+
+/**
+ * Keys the host always owns on /chat/completions. extraBody may set llama.cpp
+ * sampling knobs (dry_*, repeat_penalty, top_k, min_p, …) but cannot override
+ * the conversation, tools, stream, or Hivekeep's temperature / token caps.
+ * @internal exported for tests.
+ */
+export const EXTRA_BODY_RESERVED_KEYS = new Set([
+  'model',
+  'messages',
+  'prompt',
+  'tools',
+  'tool_choice',
+  'stream',
+  'stream_options',
+  'max_tokens',
+  'max_completion_tokens',
+  'temperature',
+  'user',
+  'reasoning_effort',
+  'n',
+])
+
+/**
+ * Parse the optional extraBody config field. Empty / omitted → {}.
+ * @internal exported for tests.
+ */
+export function parseExtraBody(raw: string | undefined): Record<string, unknown> {
+  if (!raw || !raw.trim()) return {}
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new InvalidRequestError('extraBody must be a JSON object')
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new InvalidRequestError('extraBody must be a JSON object')
+  }
+  return parsed as Record<string, unknown>
+}
+
+/**
+ * Merge extraBody onto a chat payload. Reserved host keys in extra are dropped.
+ * @internal exported for tests.
+ */
+export function applyExtraBody(
+  params: object,
+  extra: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...(params as Record<string, unknown>) }
+  for (const [key, value] of Object.entries(extra)) {
+    if (EXTRA_BODY_RESERVED_KEYS.has(key) || value === undefined) continue
+    out[key] = value
+  }
+  return out
+}
+
+function withExtraBody(
+  params: ChatCompletionCreateParamsStreaming,
+  config: ProviderConfig,
+): ChatCompletionCreateParamsStreaming {
+  return applyExtraBody(params, parseExtraBody(config['extraBody'])) as ChatCompletionCreateParamsStreaming
 }
 
 function createClient(config: ProviderConfig): OpenAI {
@@ -531,6 +603,7 @@ async function* streamChatPromptProtocol(
   request: ChatRequest,
   system: ChatCompletionSystemMessageParam | undefined,
   signal: AbortSignal | undefined,
+  config: ProviderConfig,
 ): AsyncIterable<ChatChunk> {
   const params: ChatCompletionCreateParamsStreaming = {
     model: model.id,
@@ -544,10 +617,11 @@ async function* streamChatPromptProtocol(
   if (request.maxOutputTokens != null) params.max_tokens = request.maxOutputTokens
   if (request.temperature != null) params.temperature = request.temperature
   if (request.metadata?.userId) params.user = request.metadata.userId
+  const outgoing = withExtraBody(params, config)
 
   let stream
   try {
-    stream = await client.chat.completions.create(params, { signal })
+    stream = await client.chat.completions.create(outgoing, { signal })
   } catch (err) {
     throw mapApiError(err)
   }
@@ -599,6 +673,7 @@ async function* streamChatNativeOrProtocol(
   system: ChatCompletionSystemMessageParam | undefined,
   params: ChatCompletionCreateParamsStreaming,
   key: string,
+  config: ProviderConfig,
 ): AsyncIterable<ChatChunk> {
   let started = false
   try {
@@ -615,7 +690,7 @@ async function* streamChatNativeOrProtocol(
     'Backend does not support native tools; switching to the prompt-based tool protocol',
   )
   promptProtocolModels.add(key)
-  yield* streamChatPromptProtocol(client, model, request, system, request.signal)
+  yield* streamChatPromptProtocol(client, model, request, system, request.signal, config)
 }
 
 // ─── Provider implementation ─────────────────────────────────────────────────
@@ -634,6 +709,7 @@ export const openaiCompatibleProvider: LLMProvider = {
     let baseUrl: string
     try {
       baseUrl = getBaseUrl(config)
+      parseExtraBody(config['extraBody'])
     } catch (err) {
       return { valid: false, error: mapApiError(err).message }
     }
@@ -692,7 +768,7 @@ export const openaiCompatibleProvider: LLMProvider = {
     // A backend already known to reject native tools for this model skips the
     // wasted 400 and goes straight to the prompt protocol.
     if (hasTools && promptProtocolModels.has(promptKey(config, model))) {
-      return streamChatPromptProtocol(client, model, request, system, request.signal)
+      return streamChatPromptProtocol(client, model, request, system, request.signal, config)
     }
 
     const params: ChatCompletionCreateParamsStreaming = {
@@ -726,11 +802,13 @@ export const openaiCompatibleProvider: LLMProvider = {
       params.user = request.metadata.userId
     }
 
+    const outgoing = withExtraBody(params, config)
+
     // No tools → plain native streaming. With tools → native, falling back to the
     // prompt protocol if the backend reports it does not support tools.
     if (!hasTools) {
-      return streamChat(client, params, request.signal)
+      return streamChat(client, outgoing, request.signal)
     }
-    return streamChatNativeOrProtocol(client, model, request, system, params, promptKey(config, model))
+    return streamChatNativeOrProtocol(client, model, request, system, outgoing, promptKey(config, model), config)
   },
 }
