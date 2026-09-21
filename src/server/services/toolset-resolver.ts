@@ -12,8 +12,9 @@
  *            + the Agent's custom tools      (resolveCustomTools)
  *
  *   allowed  = CORE_TOOLS ∪ resolveToolboxNames(toolboxIds)
- *              where a null/empty toolbox selection resolves to the 'all'
- *              built-in (by NAME, at runtime — never a SQL backfill).
+ *              ∪ extras (skipped when `leaf`)
+ *   For `leaf` (scout): CORE writes/shell, spawn/scout/request_tool_access
+ *   are omitted even if CORE_TOOLS or extras would grant them.
  *
  *   toolset  = { name ∈ universe | name ∈ allowed }
  *
@@ -36,8 +37,8 @@ import type { Tool } from '@/server/tools/tool-helper'
 import { toolRegistry } from '@/server/tools/index'
 import { resolveMCPTools } from '@/server/services/mcp'
 import { resolveCustomTools } from '@/server/services/custom-tools'
-import { CORE_TOOLS, getToolboxByName, resolveToolboxNames } from '@/server/services/toolboxes'
-import { HARD_EXCLUDED_FROM_SUBKIN } from '@/server/services/tasks'
+import { CORE_TOOLS, resolveToolboxNames } from '@/server/services/toolboxes'
+import { HARD_EXCLUDED_FROM_SUBKIN, LEAF_EXCLUDED_TOOLS } from '@/shared/constants'
 import { db } from '@/server/db'
 import { agents } from '@/server/db/schema'
 import { eq } from 'drizzle-orm'
@@ -107,6 +108,11 @@ export interface ResolveToolsetOptions {
   /** Reserved for quick-session callers (Stage 3 applies
    *  QUICK_SESSION_EXCLUDED_TOOLS at the call site, not here). */
   quick?: boolean
+  /**
+   * Scout / read-only leaf: skip parent extra_tool_names, omit CORE write/shell
+   * tools, and drop spawn/scout/request_tool_access even if a toolbox lists them.
+   */
+  leaf?: boolean
 }
 
 /**
@@ -126,6 +132,7 @@ export async function resolveToolset(
     channelOriginId,
     cronId,
     userId,
+    leaf = false,
   } = opts
 
   // ── Universe ──────────────────────────────────────────────────────────────
@@ -158,8 +165,13 @@ export async function resolveToolset(
   // (not threaded by callers) so every resolution path honours them; the
   // sub-Agent hard floor below still subtracts as usual.
   const resolvedIds = resolveAgentToolboxIds(toolboxIds)
-  const allowed = new Set<string>([...CORE_TOOLS, ...resolveToolboxNames(resolvedIds)])
-  for (const name of await getAgentExtraToolNames(agentId)) allowed.add(name)
+  const coreFloor = leaf
+    ? CORE_TOOLS.filter((name) => !(LEAF_EXCLUDED_TOOLS as readonly string[]).includes(name))
+    : [...CORE_TOOLS]
+  const allowed = new Set<string>([...coreFloor, ...resolveToolboxNames(resolvedIds)])
+  if (!leaf) {
+    for (const name of await getAgentExtraToolNames(agentId)) allowed.add(name)
+  }
 
   // ── Filter universe → toolset ─────────────────────────────────────────────────
   const toolset: Record<string, Tool<any, any>> = {}
@@ -170,6 +182,11 @@ export async function resolveToolset(
   // ── Sub-Agent hard floor ──────────────────────────────────────────────────────
   if (isSubAgent) {
     for (const name of HARD_EXCLUDED_FROM_SUBKIN) {
+      delete toolset[name]
+    }
+  }
+  if (leaf) {
+    for (const name of LEAF_EXCLUDED_TOOLS) {
       delete toolset[name]
     }
   }

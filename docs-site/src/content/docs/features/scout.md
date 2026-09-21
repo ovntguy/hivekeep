@@ -14,7 +14,7 @@ There are two related things called "scout": a **tool** an Agent calls, and a **
 `scout` is a native tool available to both main Agents and sub-Agents. When an Agent calls it with a self-contained brief, the tool:
 
 1. Resolves a cheap "scout" model (see the resolution chain below).
-2. Spawns an `await` sub-task on that model, using the read-only **`scout` toolbox** (`grep`, `read_file`, `list_directory`, `web_search`, `browse_url`, `extract_links`). The scout toolbox has no write tools and no spawn or scout tools, so a scout is always a leaf: it explores, it cannot mutate anything, and it cannot delegate further.
+2. Spawns an `await` sub-task on that model, using the read-only **`scout` toolbox** (`grep`, `read_file`, `list_directory`, `web_search`, `browse_url`, `extract_links`). The spawn is marked `leaf: true`: CORE write/shell tools, parent extra grants, `spawn_self` / `spawn_agent` / `scout` / `request_tool_access` are stripped, and only sub-Agent **protocol** tools (`availability` exactly `['sub-agent']`) are layered on. A scout is always a leaf: it explores, it cannot mutate the workspace, and it cannot delegate further.
 3. **Blocks** the calling Agent until the scout returns its digest, which becomes the tool's result and arrives as the Agent's next message.
 
 The scout sub-task has no view of the calling conversation, so the brief must be self-contained: what to find or read, which paths or queries to start from, and the shape of digest to report back. The tool accepts optional `hints` (focus paths and suggested searches) that are folded into the brief.

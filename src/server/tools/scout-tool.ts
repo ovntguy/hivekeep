@@ -18,8 +18,9 @@ const log = createLogger('tools:scout')
  * (resolveScoutModel: per-spawn override → Agent scout → global
  * scout default → the Agent's own model) with the read-only 'scout' built-in
  * toolbox (grep / read_file / list_directory / web_search / browse_url /
- * extract_links — NO writes, NO scout/spawn tools, so a scout is always a
- * LEAF), then BLOCK until the scout returns its digest, which becomes the
+ * extract_links). The spawn is `leaf: true`: CORE writes/shell, parent extras,
+ * and spawn/scout/request_tool_access are stripped so the child is always a
+ * LEAF. Then BLOCK until the scout returns its digest, which becomes the
  * scout tool's result.
  *
  * Two parent shapes, both handled:
@@ -151,6 +152,7 @@ export const scoutTool: ToolRegistration = {
             model: scout.modelId,
             providerId: scout.providerId ?? undefined,
             toolboxIds: [scoutBox.id],
+            leaf: true,
             thinkingConfig: thinkingConfig ?? undefined,
             channelOriginId: ctx.channelOriginId,
             parentTaskId: ctx.taskId ?? undefined,

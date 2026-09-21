@@ -12,7 +12,6 @@ import { buildSegmentedMessages } from '@/server/services/llm-cache-hints'
 import { stringifyToolResultValue } from '@/server/llm/core/vercel-bridge'
 import type { HivekeepMessage, HivekeepMessageBlock } from '@/server/llm/llm/types'
 import { resolveThinkingConfig, isContextTooLargeError, sanitizePersistedToolCalls, getActiveAgentStreamSnapshot } from '@/server/services/agent-engine'
-import { toolRegistry } from '@/server/tools/index'
 import { sseManager } from '@/server/sse/index'
 import { config } from '@/server/config'
 import { getGlobalPrompt, getMaxConcurrentTasks, getMaxQueuedTasks } from '@/server/services/app-settings'
@@ -23,66 +22,26 @@ import { runStreamStep, type ReasoningSegment } from '@/server/services/stream-r
 import { toolTurnSampling } from '@/server/services/tool-sampling'
 import type { TaskStatus, TaskMode, AgentThinkingConfig } from '@/shared/types'
 
+export { HARD_EXCLUDED_FROM_SUBKIN } from '@/shared/constants'
+
 const log = createLogger('tasks')
 
 /**
  * Minimal safety floor of native tools that genuinely cannot run inside a
- * sub-Agent, regardless of the toolboxes a task references. These are removed
- * AFTER the toolbox allow-list is computed, so even a toolbox that lists one
- * of them (e.g. the built-in 'all') cannot smuggle it into a task.
- *
- * The list is deliberately minimal — it only covers tools that require the
- * main session (cron admin, MCP admin, Agent management, custom-tool admin, and
- * the task-control tools that operate on the parent's task list). Note that
- * `spawn_self` and `spawn_agent` are intentionally NOT here: they become
- * includable via a toolbox, unlocking sub-task delegation.
+ * sub-Agent. Canonical list: `HARD_EXCLUDED_FROM_SUBKIN` in `@/shared/constants`
+ * (re-exported below). spawn_self/spawn_agent are intentionally not on it;
+ * scout leaves strip them via LEAF_EXCLUDED_TOOLS.
  */
-export const HARD_EXCLUDED_FROM_SUBKIN: readonly string[] = [
-  // Task control that needs the main session.
-  'respond_to_task',
-  'cancel_task',
-  'list_tasks',
-  // Inter-Agent reply protocol (main-session only).
-  'reply',
-  // Cron admin.
-  'create_cron',
-  'update_cron',
-  'delete_cron',
-  'list_crons',
-  // MCP admin.
-  'add_mcp_server',
-  'update_mcp_server',
-  'remove_mcp_server',
-  'list_mcp_servers',
-  // Custom-tool & tool-domain admin (the resulting custom_<slug> tools stay
-  // callable in sub-Agents when a toolbox grants them).
-  'create_custom_tool',
-  'write_custom_tool_file',
-  'run_custom_tool_setup',
-  'test_custom_tool',
-  'update_custom_tool',
-  'delete_custom_tool',
-  'list_custom_tools',
-  'create_tool_domain',
-  'update_tool_domain',
-  'delete_tool_domain',
-  // Agent management.
-  'create_agent',
-  'update_agent',
-  'delete_agent',
-  'get_agent_details',
-]
 
-/** Parse a `tasks.toolbox_ids` JSON column into a clean string[] (or undefined
- *  when null/malformed/empty). Used to forward a task's frozen toolbox
- *  selection on retry. */
+/** Parse a `tasks.toolbox_ids` JSON column into a string[] (or undefined
+ *  when null/malformed). Empty `[]` is preserved (CORE-only). Used to forward
+ *  a task's frozen toolbox selection on retry. */
 function parseTaskToolboxIds(raw: string | null): string[] | undefined {
   if (!raw) return undefined
   try {
     const parsed = JSON.parse(raw)
     if (Array.isArray(parsed)) {
-      const ids = parsed.filter((x): x is string => typeof x === 'string')
-      return ids.length > 0 ? ids : undefined
+      return parsed.filter((x): x is string => typeof x === 'string')
     }
   } catch {
     // Malformed — treat as absent.
@@ -100,20 +59,19 @@ function parseTaskToolboxIds(raw: string | null): string[] | undefined {
  *   3. Default: the 'all' built-in.
  *
  * Returns an array of toolbox **ids** (resolving built-in names to ids via the
- * toolboxes service). The empty array is returned only when a referenced
- * built-in cannot be found (should not happen once seeding has run).
+ * toolboxes service). An explicit empty JSON array (`[]`) is CORE-only (no
+ * extra toolboxes) and is distinct from null, which still defaults to 'all'.
  */
 export async function resolveTaskToolboxIds(task: {
   toolboxIds: string | null
   toolPreset: string | null
 }): Promise<string[]> {
-  // 1. Explicit toolbox ids on the task row.
+  // 1. Explicit toolbox ids on the task row (including `[]` = CORE floor only).
   if (task.toolboxIds) {
     try {
       const parsed = JSON.parse(task.toolboxIds)
       if (Array.isArray(parsed)) {
-        const ids = parsed.filter((x): x is string => typeof x === 'string')
-        if (ids.length > 0) return ids
+        return parsed.filter((x): x is string => typeof x === 'string')
       }
     } catch {
       // Malformed JSON — fall through to the legacy / default path.
@@ -641,11 +599,17 @@ interface SpawnParams {
    *  built-in toolbox of the same name at execution time. */
   toolPreset?: 'code' | 'research' | 'ops' | 'all'
   /** Optional array of toolbox ids defining the task's native toolset. Frozen
-   *  onto the task row at spawn. When set, the resolved native allow-list is
-   *  CORE_TOOLS unioned with every referenced toolbox's tool names ("*"
-   *  expands to all native tools). When absent, falls back to the built-in
-   *  matching `toolPreset`, then to 'all'. */
+   *  onto the task row at spawn. `undefined` = not specified (legacy default
+   *  'all' at resolve time). `[]` = explicit CORE-only. Non-empty = those ids.
+   *  The resolved native allow-list is CORE_TOOLS unioned with every referenced
+   *  toolbox's tool names ("*" expands to all native tools). */
   toolboxIds?: string[]
+  /**
+   * Scout / read-only leaf. Forces the built-in `scout` toolbox, sets depth to
+   * `config.tasks.maxDepth` so a leaked spawn tool still cannot nest, and
+   * causes assembleTaskToolset to strip writes/spawn/scout/extras.
+   */
+  leaf?: boolean
   /** When true, insert the task row but do NOT kick off `executeSubAgent`. The
    *  caller is responsible for starting execution (e.g. after seeding cloned
    *  messages). Used by `retryTask`. */
@@ -752,7 +716,8 @@ async function captureTaskPromptContextSnapshot(params: {
 }
 
 export async function spawnTask(params: SpawnParams) {
-  const depth = params.depth ?? 1
+  const leaf = params.leaf === true
+  const depth = leaf ? config.tasks.maxDepth : (params.depth ?? 1)
 
   // Check max depth
   if (depth > config.tasks.maxDepth) {
@@ -822,8 +787,19 @@ export async function spawnTask(params: SpawnParams) {
   const effectiveModel = params.model ?? null
   const effectiveProviderId = params.providerId ?? null
   const effectiveThinkingConfig: AgentThinkingConfig | null = params.thinkingConfig ?? null
-  const effectiveToolboxIds: string[] | null =
-    params.toolboxIds && params.toolboxIds.length > 0 ? params.toolboxIds : null
+  // `undefined` = caller omitted toolboxes → null on the row → resolve as 'all'.
+  // `[]` = explicit CORE-only. Non-empty = freeze those ids.
+  let effectiveToolboxIds: string[] | null =
+    params.toolboxIds === undefined ? null : params.toolboxIds
+
+  if (leaf) {
+    const { getToolboxByName } = await import('@/server/services/toolboxes')
+    const scoutBox = getToolboxByName('scout')
+    if (!scoutBox) {
+      throw new Error('The built-in "scout" toolbox is missing — cannot dispatch a scout.')
+    }
+    effectiveToolboxIds = [scoutBox.id]
+  }
 
   await db.insert(tasks).values({
     id: taskId,
@@ -1137,57 +1113,32 @@ async function executeSubAgent(taskId: string, isNudge = false) {
     )
     const taskProviderType = taskResolved.providerRow.type
 
-    // Unified toolset resolution. The toolbox is the sole tool-grant primitive
-    // across native + plugin + MCP + custom for the spawned Agent. We resolve the
-    // spawned Agent's MAIN surface (isSubAgent: false) intersected with the task's
-    // toolboxes, then subtract the hard sub-Agent floor, then layer on the
-    // sub-Agent-only comms tools (which are infrastructure, never toolbox-gated).
+    // Unified toolset: toolbox-gated main surface + exact-['sub-agent']
+    // protocol tools (assembleTaskToolset). Scout/leaf tasks also drop CORE
+    // writes, extras, spawn, and scout.
     const taskToolboxIds = await resolveTaskToolboxIds({
       toolboxIds: task.toolboxIds as string | null,
       toolPreset: task.toolPreset as string | null,
     })
 
-    const { resolveToolset } = await import('@/server/services/toolset-resolver')
-    const mainSurface = await resolveToolset({
+    const { assembleTaskToolset } = await import('@/server/services/task-toolset')
+    const mergedTools = await assembleTaskToolset({
       agentId: agentIdentity.id,
+      protocolAgentId: task.parentAgentId,
       toolboxIds: taskToolboxIds,
-      // isSubAgent:false → resolve the spawned Agent's MAIN tool surface. The hard
-      // sub-Agent floor is subtracted explicitly below (so an 'all' toolbox can't
-      // smuggle a main-session-only tool through).
-      isSubAgent: false,
       taskId,
       taskDepth: task.depth,
       channelOriginId: task.channelOriginId ?? undefined,
       cronId: task.cronId ?? undefined,
     })
 
-    // Hard sub-Agent floor: removed AFTER the toolbox allow-list.
-    for (const name of HARD_EXCLUDED_FROM_SUBKIN) {
-      delete mainSurface[name]
-    }
-
-    // Sub-Agent-specific tools (scoped to parent for communication back).
-    // NOT toolbox-filtered (infrastructure for the task protocol).
-    const subAgentTools = toolRegistry.resolve({
-      agentId: task.parentAgentId,
-      taskId,
-      taskDepth: task.depth,
-      isSubAgent: true,
-      channelOriginId: task.channelOriginId ?? undefined,
-      cronId: task.cronId ?? undefined,
-    })
-
-    const tools = wrapToolsWithSpill(
-      { ...mainSurface, ...subAgentTools },
-      effectiveWorkspacePath,
-    )
+    const tools = wrapToolsWithSpill(mergedTools, effectiveWorkspacePath)
 
     log.info(
       {
         taskId,
         toolboxIds: taskToolboxIds,
-        mainSurfaceCount: Object.keys(mainSurface).length,
-        subAgentCount: Object.keys(subAgentTools).length,
+        toolsetCount: Object.keys(mergedTools).length,
       },
       'Sub-Agent toolbox surface resolved',
     )

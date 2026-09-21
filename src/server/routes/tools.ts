@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { toolRegistry } from '@/server/tools/index'
-import { HARD_EXCLUDED_FROM_SUBKIN } from '@/server/services/tasks'
+import { HARD_EXCLUDED_FROM_SUBKIN } from '@/shared/constants'
 import { listAllMCPCatalogTools } from '@/server/services/mcp'
 import { listCustomTools, resolveCustomToolDisplay } from '@/server/services/custom-tools'
 import { customToolHasRenderer, customToolRendererVersion } from '@/server/services/custom-tool-renderer'

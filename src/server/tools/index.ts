@@ -11,6 +11,11 @@ interface RegistryEntry {
   domain: ToolDomain
 }
 
+function availabilityEquals(actual: ToolAvailability[], expected: ToolAvailability[]): boolean {
+  if (actual.length !== expected.length) return false
+  return expected.every((value, i) => actual[i] === value)
+}
+
 class ToolRegistry {
   private tools = new Map<string, RegistryEntry>()
 
@@ -53,6 +58,29 @@ class ToolRegistry {
     }
 
     log.debug({ agentId: ctx.agentId, resolvedCount: Object.keys(resolved).length }, 'Tools resolved for Agent')
+
+    return resolved
+  }
+
+  /**
+   * Resolve tools whose `availability` array is exactly `availability` (same
+   * length and items). Used to layer sub-Agent protocol tools
+   * (`['sub-agent']` only) without granting every native tool that merely
+   * *includes* `'sub-agent'` (spawn/scout/writes/http/browser).
+   */
+  resolveExactAvailability(
+    ctx: ToolExecutionContext,
+    availability: ToolAvailability[],
+  ): Record<string, Tool<any, any>> {
+    const resolved: Record<string, Tool<any, any>> = {}
+
+    for (const [name, entry] of this.tools) {
+      const reg = entry.registration
+      if (!availabilityEquals(reg.availability, availability)) continue
+      if (reg.condition && !reg.condition(ctx)) continue
+      const baseTool = reg.create(ctx)
+      resolved[name] = this.wrapWithHooks(name, baseTool, ctx)
+    }
 
     return resolved
   }

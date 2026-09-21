@@ -514,3 +514,59 @@ export const CORE_TOOLS: readonly string[] = [
   // a plan up-front on multi-step work and surface progress to the user.
   'task_todos',
 ]
+
+/** CORE_TOOLS entries that mutate the workspace / host. Stripped for scout leaves. */
+export const CORE_WRITE_TOOLS: readonly string[] = [
+  'write_file',
+  'edit_file',
+  'multi_edit',
+  'run_shell',
+]
+
+/**
+ * Tools a scout/leaf task must never receive (CORE writes + further delegation).
+ * Ordinary sub-Agents may still get spawn_self/spawn_agent via a toolbox —
+ * those are intentionally NOT in HARD_EXCLUDED_FROM_SUBKIN.
+ */
+export const LEAF_EXCLUDED_TOOLS: readonly string[] = [
+  ...CORE_WRITE_TOOLS,
+  'spawn_self',
+  'spawn_agent',
+  'scout',
+  'request_tool_access',
+]
+
+/**
+ * Native tools that cannot run inside a sub-Agent, regardless of toolbox.
+ * Subtracted AFTER the allow-list. Deliberately does NOT include spawn_self /
+ * spawn_agent — those are toolbox-gated. Scout leaves strip them via
+ * LEAF_EXCLUDED_TOOLS instead.
+ */
+export const HARD_EXCLUDED_FROM_SUBKIN: readonly string[] = [
+  'respond_to_task',
+  'cancel_task',
+  'list_tasks',
+  'reply',
+  'create_cron',
+  'update_cron',
+  'delete_cron',
+  'list_crons',
+  'add_mcp_server',
+  'update_mcp_server',
+  'remove_mcp_server',
+  'list_mcp_servers',
+  'create_custom_tool',
+  'write_custom_tool_file',
+  'run_custom_tool_setup',
+  'test_custom_tool',
+  'update_custom_tool',
+  'delete_custom_tool',
+  'list_custom_tools',
+  'create_tool_domain',
+  'update_tool_domain',
+  'delete_tool_domain',
+  'create_agent',
+  'update_agent',
+  'delete_agent',
+  'get_agent_details',
+]
