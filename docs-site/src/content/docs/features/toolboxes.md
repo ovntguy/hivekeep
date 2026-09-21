@@ -90,7 +90,7 @@ Tool availability is not the same in every context. Each tool declares an **avai
 - **Main** is the primary Agent in a conversation.
 - **Sub-agent** is an ephemeral instance spawned for delegated work (a task or a scout).
 
-Administrative tools (creating crons, webhooks, channels, managing Agents) are typically **main-only**, so even if a sub-Agent's toolbox lists them, they are filtered out for the sub-Agent context. Sub-Agents do keep access to the standard read/write tools their toolbox grants (memory, web, files, contacts) and to inter-Agent communication. A scout sub-Agent is deliberately the most restricted case: it runs with the `scout` toolbox, which has no writes and no ability to spawn or scout further, so a scout is always a leaf.
+Administrative tools (creating crons, webhooks, channels, managing Agents) are typically **main-only**, so even if a sub-Agent's toolbox lists them, they are filtered out for the sub-Agent context. Sub-Agents do keep access to the standard read/write tools their toolbox grants (memory, web, files, contacts) and to inter-Agent communication. Protocol tools whose availability is exactly `['sub-agent']` (report back, update status, request input) are always layered on; tools that merely *include* `'sub-agent'` (spawn, scout, writes, HTTP, browser) stay toolbox-gated. A scout sub-Agent is deliberately the most restricted case: it runs as a **leaf** with the `scout` toolbox, CORE writes/shell stripped, no extra grants, and no ability to spawn or scout further.
 
 ## Tool flags: readOnly, concurrencySafe, destructive
 

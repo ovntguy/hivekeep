@@ -403,9 +403,9 @@ export function registerAllTools(): void {
   toolRegistry.register('get_task_detail', getTaskDetailTool, 'tasks')
   toolRegistry.register('get_task_messages', getTaskMessagesTool, 'tasks')
 
-  // Scout: cheap read-only delegation (main + sub-agent). Spawns an await child
-  // on the scout model with the read-only 'scout' toolbox and blocks for its
-  // digest. The 'scout' toolbox excludes scout/spawn tools → scouts are leaves.
+  // Scout: cheap read-only leaf (main + sub-agent). Spawns an await child
+  // with leaf:true + the 'scout' toolbox; assembleTaskToolset strips writes,
+  // extras, spawn, and further scout. Protocol tools stay.
   toolRegistry.register('scout', scoutTool, 'tasks')
 
   // Phase 15: Sub-Agent tools (sub-agent only)

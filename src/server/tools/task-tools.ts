@@ -9,11 +9,13 @@ import {
   listTasksFiltered,
   getTaskMessages,
   TaskNotFoundError,
+  resolveTaskToolboxIds,
   type ListTasksFilters,
 } from '@/server/services/tasks'
 import { resolveAgentId } from '@/server/services/agent-resolver'
 import { db } from '@/server/db/index'
-import { messages, tasks } from '@/server/db/schema'
+import { agents, messages, tasks } from '@/server/db/schema'
+import { resolveAgentToolboxIds } from '@/server/services/toolset-resolver'
 import { sql } from 'drizzle-orm'
 import { createLogger } from '@/server/logger'
 import type { ToolRegistration } from '@/server/tools/types'
@@ -27,8 +29,8 @@ const log = createLogger('tools:tasks')
  * single-element list (mapping to the built-in toolbox of the same name).
  *
  * Unknown names are skipped with a warning. Returns `undefined` when nothing
- * resolves, so `spawnTask` falls back to its own default ('all',
- * else 'all') at execution time.
+ * resolves, so spawn_self inherits the parent Agent/task toolboxes and
+ * spawn_agent still falls through to spawnTask's default ('all').
  */
 async function resolveToolboxNamesToIds(
   names: string[] | undefined,
@@ -48,6 +50,32 @@ async function resolveToolboxNamesToIds(
     }
   }
   return ids.length > 0 ? ids : undefined
+}
+
+/**
+ * When spawn_self omits `toolboxes`, freeze the parent's effective selection
+ * rather than defaulting to builtin `all`. A running task inherits that
+ * task's resolved toolboxes; a main-session caller inherits the Agent's
+ * toolbox ids (possibly empty = CORE floor only).
+ */
+async function inheritParentToolboxIds(ctx: { agentId: string; taskId?: string }): Promise<string[] | undefined> {
+  if (ctx.taskId) {
+    const task = await getTask(ctx.taskId)
+    if (task) {
+      return resolveTaskToolboxIds({
+        toolboxIds: task.toolboxIds as string | null,
+        toolPreset: task.toolPreset as string | null,
+      })
+    }
+  }
+
+  const row = await db
+    .select({ toolboxIds: agents.toolboxIds })
+    .from(agents)
+    .where(eq(agents.id, ctx.agentId))
+    .get()
+  if (!row) return undefined
+  return resolveAgentToolboxIds(row.toolboxIds)
 }
 
 /**
@@ -81,7 +109,7 @@ export const spawnSelfTool: ToolRegistration = {
         thinking: z.boolean().optional()
           .describe('Enable extended thinking/reasoning for this task. Omit to inherit from parent Agent config.'),
         toolboxes: z.array(z.string()).optional()
-          .describe('Names of the toolboxes whose tools the sub-Agent may use. The sub-Agent\'s native toolset is the mandatory core floor unioned with every chosen toolbox\'s tools. Built-ins: "code", "research", "ops", "scout" (read-only), "all" (full surface). Use list_toolboxes to discover available toolboxes. Omit to default to "all".'),
+          .describe('Names of the toolboxes whose tools the sub-Agent may use. The sub-Agent\'s native toolset is the mandatory core floor unioned with every chosen toolbox\'s tools. Built-ins: "code", "research", "ops", "scout" (read-only leaf), "all" (full surface). Use list_toolboxes to discover available toolboxes. Omit to inherit your current toolboxes (this task\'s, or your Agent\'s).'),
         tool_preset: z.enum(['code', 'research', 'ops', 'all']).optional()
           .describe('DEPRECATED — use `toolboxes` instead. When set and `toolboxes` is absent, it maps to the built-in toolbox of the same name.'),
       }),
@@ -95,6 +123,7 @@ export const spawnSelfTool: ToolRegistration = {
           )
         }
         const toolboxIds = await resolveToolboxNamesToIds(toolboxes, tool_preset)
+          ?? await inheritParentToolboxIds(ctx)
         const { taskId, queued } = await spawnTask({
           parentAgentId: ctx.agentId,
           title,

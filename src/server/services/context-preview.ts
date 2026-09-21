@@ -8,7 +8,6 @@ import { listActiveTriggerSummariesForAgent } from '@/server/services/account-tr
 import { listContactsForPrompt } from '@/server/services/contacts'
 import { listAvailableAgents } from '@/server/services/inter-agent'
 import { getMCPToolsSummary } from '@/server/services/mcp'
-import { toolRegistry } from '@/server/tools/index'
 import { getGlobalPrompt } from '@/server/services/app-settings'
 import { getSystemContext } from '@/server/services/system-context'
 import { fetchPreviousCronRuns } from '@/server/services/tasks'
@@ -792,31 +791,22 @@ export async function buildTaskContextPreview(taskId: string): Promise<ContextPr
     }
   })
 
-  // Tools: same resolution as executeSubAgent. Unified resolver gives the spawned
-  // Agent's MAIN surface (isSubAgent:false) intersected with the task's toolboxes;
-  // we subtract the hard sub-Agent floor AFTER the allow-list, then layer on the
-  // sub-Agent-only comms tools (infrastructure, never toolbox-gated). Toolbox ids
-  // resolve from the task row (explicit toolbox_ids → legacy tool_preset →
-  // default).
-  const { resolveTaskToolboxIds, HARD_EXCLUDED_FROM_SUBKIN } = await import('@/server/services/tasks')
-  const { resolveToolset } = await import('@/server/services/toolset-resolver')
+  // Tools: same resolution as executeSubAgent (assembleTaskToolset).
+  const { resolveTaskToolboxIds } = await import('@/server/services/tasks')
+  const { assembleTaskToolset } = await import('@/server/services/task-toolset')
   const taskToolboxIds = await resolveTaskToolboxIds({
     toolboxIds: task.toolboxIds as string | null,
     toolPreset: task.toolPreset as string | null,
   })
-  const mainSurface = await resolveToolset({
+  const allTools = await assembleTaskToolset({
     agentId: agentIdentity.id,
+    protocolAgentId: task.parentAgentId,
     toolboxIds: taskToolboxIds,
-    isSubAgent: false,
     taskId,
     taskDepth: task.depth,
+    channelOriginId: task.channelOriginId ?? undefined,
+    cronId: task.cronId ?? undefined,
   })
-  for (const name of HARD_EXCLUDED_FROM_SUBKIN) {
-    delete mainSurface[name]
-  }
-
-  const subAgentTools = toolRegistry.resolve({ agentId: task.parentAgentId, taskId, taskDepth: task.depth, isSubAgent: true })
-  const allTools = { ...mainSurface, ...subAgentTools }
   const taskSourceMap = buildSourceMap(allTools)
 
   // Build cron run previews

@@ -44,6 +44,8 @@ const mockTasksExports = {
   ...mockTasks,
   TaskNotRetryableError: FakeTaskNotRetryableError,
   TaskNotFoundError: FakeTaskNotFoundError,
+  HARD_EXCLUDED_FROM_SUBKIN: [] as string[],
+  resolveTaskToolboxIds: mock(() => Promise.resolve([] as string[])),
 }
 
 const mockAgentResolver = {
@@ -165,15 +167,15 @@ describe('task-tools', () => {
 
       expect(result).toEqual({ taskId: 'task-456', status: 'pending' })
       expect(mockTasks.spawnTask).toHaveBeenCalledTimes(1)
-      expect(mockTasks.spawnTask).toHaveBeenCalledWith({
-        parentAgentId: 'agent-abc',
-        title: 'Research topic',
-        description: 'Research quantum computing',
-        mode: 'await',
-        spawnType: 'self',
-        model: undefined,
-        allowHumanPrompt: undefined,
-      })
+      expect(mockTasks.spawnTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parentAgentId: 'agent-abc',
+          title: 'Research topic',
+          description: 'Research quantum computing',
+          mode: 'await',
+          spawnType: 'self',
+        }),
+      )
     })
 
     itMocked('passes optional model parameter (with required provider_id)', async () => {
@@ -213,6 +215,21 @@ describe('task-tools', () => {
 
       expect(mockTasks.spawnTask).toHaveBeenCalledWith(
         expect.objectContaining({ allowHumanPrompt: false }),
+      )
+    })
+
+    itMocked('inherits parent Agent toolbox ids when toolboxes are omitted', async () => {
+      mockDbChain.get.mockResolvedValue({ toolboxIds: JSON.stringify(['tb-windows']) })
+      mockTasks.spawnTask.mockResolvedValue({ taskId: 'task-inh' })
+
+      await execute(spawnSelfTool, {
+        title: 'Task',
+        task_description: 'Do it',
+        mode: 'await',
+      })
+
+      expect(mockTasks.spawnTask).toHaveBeenCalledWith(
+        expect.objectContaining({ toolboxIds: ['tb-windows'] }),
       )
     })
   })
