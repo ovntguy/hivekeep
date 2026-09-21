@@ -224,6 +224,9 @@ describe('buildSystemPrompt', () => {
     expect(result).toContain('Analyze the data and report findings.')
     expect(result).toContain('## Constraints')
     expect(result).toContain('update_task_status()')
+    expect(result).toContain('when the work is actually done')
+    expect(result).toContain('Do NOT call it early')
+    expect(result).not.toContain('before you finish')
   })
 
   it('sub-agent prompt does not include internal instructions', () => {

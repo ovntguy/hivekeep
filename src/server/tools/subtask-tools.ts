@@ -47,7 +47,7 @@ export const updateTaskStatusTool: ToolRegistration = {
   create: (ctx) =>
     tool({
       description:
-        'Update task status. "completed" or "failed" finalizes the task.',
+        'Update task status. "completed" or "failed" finalizes the task immediately — call only after the full result is ready, never mid-work.',
       inputSchema: z.object({
         status: z
           .enum(['in_progress', 'completed', 'failed']),
