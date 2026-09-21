@@ -553,10 +553,11 @@ export function buildSystemPrompt(params: PromptParams): BuiltSystemPrompt {
       `- **Plan with \`think\` when you're about to thrash.** When the next move isn't obvious (failing test, ambiguous results, choosing between refactors), call the \`think\` tool with a paragraph or two of reasoning instead of issuing speculative reads. It has no side effects; it just makes your plan visible to the user and to yourself on the next step.\n` +
       `- **Use \`task_todos\` for multi-step work (≥3 steps).** Set the full list at the start, advance one item to \`in_progress\` as you begin it (at most one in-flight), and mark each \`completed\` AS SOON AS it's done — never batch completions at the end. Skip for trivial single-step tasks. The list is visible to the user.\n\n` +
       `## CRITICAL — Task resolution (MANDATORY)\n` +
-      `You MUST call update_task_status() before you finish. There is no auto-completion.\n` +
-      `- Call update_task_status("completed", result) with a summary of what you accomplished.\n` +
-      `- Call update_task_status("failed", undefined, reason) if you cannot accomplish the task.\n` +
-      `If you do not call update_task_status(), the task will be marked as failed automatically.` +
+      `You MUST call update_task_status() when the work is actually done — after the full result is ready. There is no auto-completion.\n` +
+      `Do NOT call it early (mid-investigation, after the first tool results, or before every required part of the mission is finished). Calling completed/failed closes the task immediately.\n` +
+      `- Call update_task_status("completed", result) with the FULL summary of what you accomplished (every required part of the mission).\n` +
+      `- Call update_task_status("failed", undefined, reason) only if you cannot accomplish the task.\n` +
+      `If you never call update_task_status(), the task will be marked as failed automatically.` +
       cronJournalInstruction,
     )
 

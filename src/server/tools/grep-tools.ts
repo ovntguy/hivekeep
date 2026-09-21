@@ -58,8 +58,9 @@ function buildRgArgs(params: {
   } else if (params.outputMode === 'count') {
     args.push('-c')
   } else {
-    // content mode
-    if (params.lineNumbers !== false) args.push('-n')
+    // Content mode: --json so paths with hyphens/UUIDs/drive letters are never
+    // split on ":line:" / "-line-". Line numbers come from the JSON events.
+    args.push('--json')
 
     if (params.context != null) {
       args.push(`-C${params.context}`)
@@ -127,9 +128,67 @@ function buildGrepArgs(params: {
   return args
 }
 
+function relativize(workspace: string, rawFile: string): string {
+  return relative(workspace, resolve(workspace, rawFile)) || rawFile
+}
+
+function stripLineEnding(text: string): string {
+  if (text.endsWith('\r\n')) return text.slice(0, -2)
+  if (text.endsWith('\n') || text.endsWith('\r')) return text.slice(0, -1)
+  return text
+}
+
 /**
- * Parse rg/grep output for content mode.
- * Format: "file:line:content" or "file-line-content" (context lines)
+ * Parse ripgrep --json NDJSON for content mode (match + context events).
+ * Paths come from data.path.text — never split on hyphens or drive colons.
+ */
+function parseRgJsonContent(
+  stdout: string,
+  workspace: string,
+  maxResults: number,
+): { matches: ContentMatch[]; truncated: boolean } {
+  if (!stdout.trim()) return { matches: [], truncated: false }
+
+  const matches: ContentMatch[] = []
+  let truncated = false
+
+  for (const line of stdout.split('\n')) {
+    if (!line.trim()) continue
+    if (matches.length >= maxResults) {
+      truncated = true
+      break
+    }
+
+    let ev: {
+      type?: string
+      data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } }
+    }
+    try {
+      ev = JSON.parse(line) as typeof ev
+    } catch {
+      continue
+    }
+    if (ev.type !== 'match' && ev.type !== 'context') continue
+    const data = ev.data
+    if (!data) continue
+
+    const rawFile = data.path?.text ?? ''
+    const lineNo = data.line_number
+    matches.push({
+      file: rawFile ? relativize(workspace, rawFile) : rawFile,
+      line: typeof lineNo === 'number' ? lineNo : 0,
+      content: stripLineEnding(data.lines?.text ?? ''),
+    })
+  }
+
+  return { matches, truncated }
+}
+
+/**
+ * Parse GNU grep (fallback) content output: "file:line:content".
+ * Colon-only — never treat "-digits-" as a delimiter (Windows UUID folders
+ * like d727fa29-45ae-4f49-8258-36702effc00b would otherwise split at 8258).
+ * Skip a leading drive letter so the next colon is the grep separator.
  */
 function parseContentOutput(
   stdout: string,
@@ -148,19 +207,17 @@ function parseContentOutput(
       break
     }
 
-    // Match "file:line:content" or "file-line-content" (context lines with -)
-    const match = line.match(/^(.+?)[:\-](\d+)[:\-](.*)$/)
-    if (match) {
-      const rawFile = match[1]!
-      const rawLine = match[2]!
-      const rawContent = match[3]!
-      const filePath = relative(workspace, resolve(workspace, rawFile))
-      matches.push({
-        file: filePath || rawFile,
-        line: parseInt(rawLine, 10),
-        content: rawContent,
-      })
-    }
+    const drive = line.length >= 2 && /[A-Za-z]/.test(line[0]!) && line[1] === ':' ? 2 : 0
+    const rest = line.slice(drive)
+    const match = rest.match(/^(.+):(\d+):(.*)$/)
+    if (!match) continue
+
+    const rawFile = line.slice(0, drive) + match[1]!
+    matches.push({
+      file: relativize(workspace, rawFile),
+      line: parseInt(match[2]!, 10),
+      content: match[3]!,
+    })
   }
 
   return { matches, truncated }
@@ -324,6 +381,7 @@ export const grepTool: ToolRegistration = {
           }
 
           let result: { stdout: string; stderr: string; exitCode: number }
+          let usedRg = true
 
           // Try rg first, fall back to grep
           try {
@@ -332,6 +390,7 @@ export const grepTool: ToolRegistration = {
           } catch (err: any) {
             // rg not found or timeout — try grep fallback
             if (err.message === 'Search timeout') throw err
+            usedRg = false
             const grepArgs = buildGrepArgs(commonParams)
             result = await execCommand(grepArgs, workspace, DEFAULT_TIMEOUT)
           }
@@ -378,7 +437,9 @@ export const grepTool: ToolRegistration = {
 
           // Parse output based on mode
           if (outputMode === 'content') {
-            const { matches, truncated } = parseContentOutput(stdout, workspace, maxResults)
+            const { matches, truncated } = usedRg
+              ? parseRgJsonContent(stdout, workspace, maxResults)
+              : parseContentOutput(stdout, workspace, maxResults)
             log.info(
               { agentId: ctx.agentId, pattern, matchCount: matches.length },
               'Grep search completed',

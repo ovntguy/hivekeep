@@ -1748,10 +1748,10 @@ async function executeSubAgent(taskId: string, isNudge = false) {
           role: 'user',
           content:
             '[System] You have not called update_task_status() yet. ' +
-            'You MUST finalize this task now:\n' +
-            '- Call update_task_status("completed", "<summary of what you accomplished>") if the task is done.\n' +
+            'If the mission is fully done, finalize it now with the COMPLETE result:\n' +
+            '- Call update_task_status("completed", "<full summary of every required part>") if the work is finished.\n' +
             '- Call update_task_status("failed", undefined, "<reason>") if you could not complete it.\n' +
-            'Do this immediately.',
+            'If you still have required work left, finish that first, then call update_task_status. Do not finalize early.',
           sourceType: 'system',
           createdAt: new Date(),
         })

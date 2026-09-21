@@ -18,6 +18,10 @@ import { describe, it, expect } from 'bun:test'
 
 import { resolve, relative } from 'path'
 
+function slash(p: string): string {
+  return p.replaceAll('\\', '/')
+}
+
 // ── Replicated pure functions from grep-tools.ts ──
 
 type OutputMode = 'content' | 'files_with_matches' | 'count'
@@ -62,7 +66,7 @@ function buildRgArgs(params: {
   } else if (params.outputMode === 'count') {
     args.push('-c')
   } else {
-    if (params.lineNumbers !== false) args.push('-n')
+    args.push('--json')
 
     if (params.context != null) {
       args.push(`-C${params.context}`)
@@ -127,6 +131,58 @@ function buildGrepArgs(params: {
   return args
 }
 
+function relativize(workspace: string, rawFile: string): string {
+  return relative(workspace, resolve(workspace, rawFile)) || rawFile
+}
+
+function stripLineEnding(text: string): string {
+  if (text.endsWith('\r\n')) return text.slice(0, -2)
+  if (text.endsWith('\n') || text.endsWith('\r')) return text.slice(0, -1)
+  return text
+}
+
+function parseRgJsonContent(
+  stdout: string,
+  workspace: string,
+  maxResults: number,
+): { matches: ContentMatch[]; truncated: boolean } {
+  if (!stdout.trim()) return { matches: [], truncated: false }
+
+  const matches: ContentMatch[] = []
+  let truncated = false
+
+  for (const line of stdout.split('\n')) {
+    if (!line.trim()) continue
+    if (matches.length >= maxResults) {
+      truncated = true
+      break
+    }
+
+    let ev: {
+      type?: string
+      data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } }
+    }
+    try {
+      ev = JSON.parse(line) as typeof ev
+    } catch {
+      continue
+    }
+    if (ev.type !== 'match' && ev.type !== 'context') continue
+    const data = ev.data
+    if (!data) continue
+
+    const rawFile = data.path?.text ?? ''
+    const lineNo = data.line_number
+    matches.push({
+      file: rawFile ? relativize(workspace, rawFile) : rawFile,
+      line: typeof lineNo === 'number' ? lineNo : 0,
+      content: stripLineEnding(data.lines?.text ?? ''),
+    })
+  }
+
+  return { matches, truncated }
+}
+
 function parseContentOutput(
   stdout: string,
   workspace: string,
@@ -144,18 +200,17 @@ function parseContentOutput(
       break
     }
 
-    const match = line.match(/^(.+?)[:\-](\d+)[:\-](.*)$/)
-    if (match) {
-      const rawFile = match[1]!
-      const rawLine = match[2]!
-      const rawContent = match[3]!
-      const filePath = relative(workspace, resolve(workspace, rawFile))
-      matches.push({
-        file: filePath || rawFile,
-        line: parseInt(rawLine, 10),
-        content: rawContent,
-      })
-    }
+    const drive = line.length >= 2 && /[A-Za-z]/.test(line[0]!) && line[1] === ':' ? 2 : 0
+    const rest = line.slice(drive)
+    const match = rest.match(/^(.+):(\d+):(.*)$/)
+    if (!match) continue
+
+    const rawFile = line.slice(0, drive) + match[1]!
+    matches.push({
+      file: relativize(workspace, rawFile),
+      line: parseInt(match[2]!, 10),
+      content: match[3]!,
+    })
   }
 
   return { matches, truncated }
@@ -199,7 +254,7 @@ describe('buildRgArgs', () => {
     expect(args).toContain('--color=never')
     expect(args).toContain('--glob=!node_modules')
     expect(args).toContain('--glob=!.git')
-    expect(args).toContain('-n') // line numbers default
+    expect(args).toContain('--json') // content mode uses rg JSON
     expect(args).toContain('--')
     expect(args).toContain('TODO')
     expect(args).toContain('/workspace')
@@ -295,13 +350,14 @@ describe('buildRgArgs', () => {
     expect(args).toContain('--glob=*.ts')
   })
 
-  it('disables line numbers when explicitly false', () => {
+  it('uses --json for content mode and never -n', () => {
     const args = buildRgArgs({
       pattern: 'test',
       searchPath: '/ws',
       outputMode: 'content',
       lineNumbers: false,
     })
+    expect(args).toContain('--json')
     expect(args).not.toContain('-n')
   })
 
@@ -418,24 +474,22 @@ describe('parseContentOutput', () => {
     const result = parseContentOutput(stdout, workspace, 100)
     expect(result.matches).toHaveLength(2)
     expect(result.truncated).toBe(false)
-    expect(result.matches[0]).toEqual({
-      file: 'src/main.ts',
-      line: 10,
-      content: 'const x = 42',
-    })
-    expect(result.matches[1]).toEqual({
-      file: 'src/main.ts',
-      line: 20,
-      content: 'const y = 43',
-    })
+    expect(slash(result.matches[0]!.file)).toBe('src/main.ts')
+    expect(result.matches[0]!.line).toBe(10)
+    expect(result.matches[0]!.content).toBe('const x = 42')
+    expect(slash(result.matches[1]!.file)).toBe('src/main.ts')
+    expect(result.matches[1]!.line).toBe(20)
+    expect(result.matches[1]!.content).toBe('const y = 43')
   })
 
-  it('parses context lines with dash separator', () => {
-    const stdout = 'src/a.ts:5:match line\nsrc/a.ts-6-context line\n'
-    const result = parseContentOutput(stdout, workspace, 100)
-    expect(result.matches).toHaveLength(2)
-    expect(result.matches[0]!.content).toBe('match line')
-    expect(result.matches[1]!.content).toBe('context line')
+  it('does not split a Windows UUID folder on -8258-', () => {
+    const workspaceWin = 'C:\\Users\\ovntg\\hivekeep\\data\\workspaces\\d727fa29-45ae-4f49-8258-36702effc00b'
+    const stdout = workspaceWin + '\\reports\\mcp-ssh-1.3.9-hang-findings.md:16:`runRemoteCommand` spawns ssh\n'
+    const result = parseContentOutput(stdout, workspaceWin, 100)
+    expect(result.matches).toHaveLength(1)
+    expect(result.matches[0]!.line).toBe(16)
+    expect(result.matches[0]!.file.replaceAll('\\', '/')).toContain('reports/mcp-ssh-1.3.9-hang-findings.md')
+    expect(result.matches[0]!.content).toBe('`runRemoteCommand` spawns ssh')
   })
 
   it('truncates at maxResults', () => {
@@ -463,14 +517,14 @@ describe('parseContentOutput', () => {
   it('relativizes absolute paths', () => {
     const stdout = '/home/user/workspace/src/file.ts:1:hello\n'
     const result = parseContentOutput(stdout, workspace, 100)
-    expect(result.matches[0]!.file).toBe('src/file.ts')
+    expect(slash(result.matches[0]!.file)).toBe('src/file.ts')
   })
 
   it('skips unparseable lines', () => {
     const stdout = 'Binary file matches\nsrc/a.ts:1:real match\n'
     const result = parseContentOutput(stdout, workspace, 100)
     expect(result.matches).toHaveLength(1)
-    expect(result.matches[0]!.file).toBe('src/a.ts')
+    expect(slash(result.matches[0]!.file)).toBe('src/a.ts')
   })
 
   it('handles empty content after line number', () => {
@@ -479,6 +533,48 @@ describe('parseContentOutput', () => {
     expect(result.matches).toHaveLength(1)
     expect(result.matches[0]!.content).toBe('')
     expect(result.matches[0]!.line).toBe(10)
+  })
+})
+
+describe('parseRgJsonContent', () => {
+  const workspace = '/home/user/workspace'
+
+  it('parses match events without splitting UUID paths', () => {
+    const workspaceWin = 'C:\\Users\\ovntg\\hivekeep\\data\\workspaces\\d727fa29-45ae-4f49-8258-36702effc00b'
+    const ev = {
+      type: 'match',
+      data: {
+        path: { text: workspaceWin + '\\reports\\foo.md' },
+        line_number: 16,
+        lines: { text: 'runRemoteCommand hangs\n' },
+      },
+    }
+    const result = parseRgJsonContent(JSON.stringify(ev) + '\n', workspaceWin, 100)
+    expect(result.matches).toHaveLength(1)
+    expect(result.matches[0]!.line).toBe(16)
+    expect(result.matches[0]!.content).toBe('runRemoteCommand hangs')
+    expect(result.matches[0]!.file.replaceAll('\\', '/')).toContain('reports/foo.md')
+  })
+
+  it('includes context events', () => {
+    const match = { type: 'match', data: { path: { text: '/home/user/workspace/a.ts' }, line_number: 5, lines: { text: 'hit\n' } } }
+    const ctx = { type: 'context', data: { path: { text: '/home/user/workspace/a.ts' }, line_number: 6, lines: { text: 'after\n' } } }
+    const result = parseRgJsonContent(JSON.stringify(match) + '\n' + JSON.stringify(ctx) + '\n', workspace, 100)
+    expect(result.matches).toHaveLength(2)
+    expect(result.matches[0]!.content).toBe('hit')
+    expect(result.matches[1]!.content).toBe('after')
+    expect(result.matches[1]!.line).toBe(6)
+  })
+
+  it('skips begin/end events and truncates', () => {
+    const begin = { type: 'begin', data: { path: { text: 'a.ts' } } }
+    const lines = [JSON.stringify(begin)]
+    for (let i = 1; i <= 5; i++) {
+      lines.push(JSON.stringify({ type: 'match', data: { path: { text: '/home/user/workspace/a.ts' }, line_number: i, lines: { text: 'x' + i + '\n' } } }))
+    }
+    const result = parseRgJsonContent(lines.join('\n') + '\n', workspace, 3)
+    expect(result.matches).toHaveLength(3)
+    expect(result.truncated).toBe(true)
   })
 })
 
@@ -496,13 +592,13 @@ describe('parseFilesOutput', () => {
   it('parses file list', () => {
     const stdout = 'src/a.ts\nsrc/b.ts\nlib/c.js\n'
     const result = parseFilesOutput(stdout, workspace)
-    expect(result).toEqual(['src/a.ts', 'src/b.ts', 'lib/c.js'])
+    expect(result.map(slash)).toEqual(['src/a.ts', 'src/b.ts', 'lib/c.js'])
   })
 
   it('relativizes absolute paths', () => {
     const stdout = '/home/user/workspace/src/file.ts\n'
     const result = parseFilesOutput(stdout, workspace)
-    expect(result).toEqual(['src/file.ts'])
+    expect(result.map(slash)).toEqual(['src/file.ts'])
   })
 
   it('filters empty lines', () => {
@@ -526,7 +622,7 @@ describe('parseCountOutput', () => {
   it('parses count output', () => {
     const stdout = 'src/a.ts:5\nsrc/b.ts:12\n'
     const result = parseCountOutput(stdout, workspace)
-    expect(result).toEqual([
+    expect(result.map(e => ({ ...e, file: slash(e.file) }))).toEqual([
       { file: 'src/a.ts', count: 5 },
       { file: 'src/b.ts', count: 12 },
     ])
@@ -535,7 +631,7 @@ describe('parseCountOutput', () => {
   it('filters zero counts', () => {
     const stdout = 'src/a.ts:3\nsrc/b.ts:0\nsrc/c.ts:1\n'
     const result = parseCountOutput(stdout, workspace)
-    expect(result).toEqual([
+    expect(result.map(e => ({ ...e, file: slash(e.file) }))).toEqual([
       { file: 'src/a.ts', count: 3 },
       { file: 'src/c.ts', count: 1 },
     ])
@@ -544,25 +640,25 @@ describe('parseCountOutput', () => {
   it('filters lines without colons', () => {
     const stdout = 'no-colon-here\nsrc/a.ts:2\n'
     const result = parseCountOutput(stdout, workspace)
-    expect(result).toEqual([{ file: 'src/a.ts', count: 2 }])
+    expect(result.map(e => ({ ...e, file: slash(e.file) }))).toEqual([{ file: 'src/a.ts', count: 2 }])
   })
 
   it('filters NaN counts', () => {
     const stdout = 'src/a.ts:abc\nsrc/b.ts:7\n'
     const result = parseCountOutput(stdout, workspace)
-    expect(result).toEqual([{ file: 'src/b.ts', count: 7 }])
+    expect(result.map(e => ({ ...e, file: slash(e.file) }))).toEqual([{ file: 'src/b.ts', count: 7 }])
   })
 
   it('handles files with colons in path', () => {
     // Uses lastIndexOf(':') so this should work
     const stdout = 'src/file:name.ts:4\n'
     const result = parseCountOutput(stdout, workspace)
-    expect(result).toEqual([{ file: 'src/file:name.ts', count: 4 }])
+    expect(result.map(e => ({ ...e, file: slash(e.file) }))).toEqual([{ file: 'src/file:name.ts', count: 4 }])
   })
 
   it('relativizes absolute paths', () => {
     const stdout = '/home/user/workspace/src/file.ts:3\n'
     const result = parseCountOutput(stdout, workspace)
-    expect(result).toEqual([{ file: 'src/file.ts', count: 3 }])
+    expect(result.map(e => ({ ...e, file: slash(e.file) }))).toEqual([{ file: 'src/file.ts', count: 3 }])
   })
 })
