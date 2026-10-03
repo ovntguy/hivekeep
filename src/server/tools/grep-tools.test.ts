@@ -141,6 +141,20 @@ function stripLineEnding(text: string): string {
   return text
 }
 
+/**
+ * Drop terminal control sequences from returned line text.
+ * CSI includes private modes such as ESC [ ? 9001 l.
+ * OSC runs until BEL or ST. DCS runs until ST.
+ * Applied after a match is parsed so the search itself stays raw.
+ */
+function stripTerminalEscapes(text: string): string {
+  return text.replace(
+    /\u001b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\u001b\][\s\S]*?(?:\u0007|\u001b\\)|\u001bP[\s\S]*?\u001b\\/g,
+    '',
+  )
+}
+
+
 function parseRgJsonContent(
   stdout: string,
   workspace: string,
@@ -176,7 +190,7 @@ function parseRgJsonContent(
     matches.push({
       file: rawFile ? relativize(workspace, rawFile) : rawFile,
       line: typeof lineNo === 'number' ? lineNo : 0,
-      content: stripLineEnding(data.lines?.text ?? ''),
+      content: stripTerminalEscapes(stripLineEnding(data.lines?.text ?? '')),
     })
   }
 
@@ -209,7 +223,7 @@ function parseContentOutput(
     matches.push({
       file: relativize(workspace, rawFile),
       line: parseInt(match[2]!, 10),
-      content: match[3]!,
+      content: stripTerminalEscapes(match[3]!),
     })
   }
 
@@ -527,6 +541,17 @@ describe('parseContentOutput', () => {
     expect(slash(result.matches[0]!.file)).toBe('src/a.ts')
   })
 
+  it('strips private-mode CSI and OSC from matched line content', () => {
+    const plain = 'plain text'
+    const wrapped = '\u001bP$t\u001b\\\u001b[?9001l\u001b]0;Window Title\u0007' + plain + '\u001b[?9001h'
+    const stdout = `src/term.ts:4:${wrapped}\n`
+    const result = parseContentOutput(stdout, workspace, 100)
+    expect(result.matches).toHaveLength(1)
+    expect(result.matches[0]!.line).toBe(4)
+    expect(result.matches[0]!.content).toBe(plain)
+    expect(slash(result.matches[0]!.file)).toBe('src/term.ts')
+  })
+
   it('handles empty content after line number', () => {
     const stdout = 'file.ts:10:\n'
     const result = parseContentOutput(stdout, workspace, 100)
@@ -554,6 +579,23 @@ describe('parseRgJsonContent', () => {
     expect(result.matches[0]!.line).toBe(16)
     expect(result.matches[0]!.content).toBe('runRemoteCommand hangs')
     expect(result.matches[0]!.file.replaceAll('\\', '/')).toContain('reports/foo.md')
+  })
+
+  it('strips private-mode CSI and OSC ST from rg JSON line content', () => {
+    const plain = 'plain text'
+    const wrapped = '\u001b[?9001l\u001b]0;Window Title\u001b\\' + plain + '\u001bP+q\u001b\\'
+    const ev = {
+      type: 'match',
+      data: {
+        path: { text: '/home/user/workspace/src/term.ts' },
+        line_number: 4,
+        lines: { text: wrapped + '\n' },
+      },
+    }
+    const result = parseRgJsonContent(JSON.stringify(ev) + '\n', workspace, 100)
+    expect(result.matches).toHaveLength(1)
+    expect(result.matches[0]!.line).toBe(4)
+    expect(result.matches[0]!.content).toBe(plain)
   })
 
   it('includes context events', () => {

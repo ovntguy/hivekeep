@@ -139,6 +139,20 @@ function stripLineEnding(text: string): string {
 }
 
 /**
+ * Drop terminal control sequences from returned line text.
+ * CSI includes private modes such as ESC [ ? 9001 l.
+ * OSC runs until BEL or ST. DCS runs until ST.
+ * Applied after a match is parsed so the search itself stays raw.
+ */
+function stripTerminalEscapes(text: string): string {
+  return text.replace(
+    /\u001b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\u001b\][\s\S]*?(?:\u0007|\u001b\\)|\u001bP[\s\S]*?\u001b\\/g,
+    '',
+  )
+}
+
+
+/**
  * Parse ripgrep --json NDJSON for content mode (match + context events).
  * Paths come from data.path.text — never split on hyphens or drive colons.
  */
@@ -177,7 +191,7 @@ function parseRgJsonContent(
     matches.push({
       file: rawFile ? relativize(workspace, rawFile) : rawFile,
       line: typeof lineNo === 'number' ? lineNo : 0,
-      content: stripLineEnding(data.lines?.text ?? ''),
+      content: stripTerminalEscapes(stripLineEnding(data.lines?.text ?? '')),
     })
   }
 
@@ -216,7 +230,7 @@ function parseContentOutput(
     matches.push({
       file: relativize(workspace, rawFile),
       line: parseInt(match[2]!, 10),
-      content: match[3]!,
+      content: stripTerminalEscapes(match[3]!),
     })
   }
 
