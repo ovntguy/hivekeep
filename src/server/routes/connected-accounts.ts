@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { config } from '@/server/config'
+import { loopbackOAuthOrigin } from '@/server/services/oauth-origin'
 import { createLogger } from '@/server/logger'
 import { getEmailProvider } from '@/server/email/registry'
 import { getContactsProvider } from '@/server/contacts/registry'
@@ -46,6 +47,8 @@ function configProviderFor(type: string, capability: string): ConfigProviderLike
 /** Public origin for OAuth redirect URIs (PUBLIC_URL → X-Forwarded → req).
  *  Mirrors the email-accounts route — the OAuth connect/callback live there. */
 function publicOrigin(c: Context): string {
+  const loopback = loopbackOAuthOrigin(c)
+  if (loopback) return loopback
   if (process.env.PUBLIC_URL) return new URL(config.publicUrl).origin
   const fwdProto = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim()
   const fwdHost = (c.req.header('x-forwarded-host') ?? c.req.header('host'))?.split(',')[0]?.trim()

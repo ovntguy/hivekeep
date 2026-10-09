@@ -69,6 +69,8 @@ OAuth needs a one-time **operator setup** per provider type: you register an OAu
 When you select multiple capabilities, Hivekeep requests the **union** of the email, calendar, and contacts scopes in one consent and writes a single account that serves all of them. Internally only a long-lived refresh token is stored (encrypted); short-lived access tokens are fetched on demand and never persisted.
 
 > Reverse-proxy note: the redirect URI must match what you registered exactly. Behind a TLS-terminating proxy, set `PUBLIC_URL` to your canonical public origin so Hivekeep builds the correct redirect URI. Google only allows plain `http` on `localhost`/loopback; a LAN IP needs `https`. See [Configuration](/docs/getting-started/configuration/).
+>
+> LAN `PUBLIC_URL` with a local browser: if `PUBLIC_URL` is plain `http` on a private IPv4 (for example `http://192.168.1.20:3000`) and you start the connect from a browser on the server machine itself at `http://127.0.0.1:<PORT>` or `http://localhost:<PORT>`, the redirect URI stays on that loopback origin, so register the loopback redirect URI with the provider. This only applies when the socket peer is loopback, the `Host` port is the server's own port, and no proxy header (`X-Forwarded-Host`, `X-Forwarded-Proto`, `Forwarded`, `X-Forwarded-For`, `X-Real-IP`) is present. Hostname or `https` `PUBLIC_URL`s and proxied requests are unchanged.
 
 ### Credential providers (iCloud, generic IMAP / CalDAV / CardDAV)
 
