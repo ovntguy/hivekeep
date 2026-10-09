@@ -96,6 +96,15 @@ describe('loopbackOAuthOrigin (Hono context)', () => {
     })
   }
 
+  for (const name of PROXY_HEADERS) {
+    it(`treats an empty ${name} as proxied`, async () => {
+      const req = new Request('http://127.0.0.1:3000/o', { headers: { host: '127.0.0.1:3000', [name]: '' } })
+      expect(req.headers.has(name)).toBe(true)
+      const res = await app.fetch(req, fakeServer('127.0.0.1'))
+      expect(((await res.json()) as { origin: string | null }).origin).toBeNull()
+    })
+  }
+
   it('covers all five proxy headers', () => {
     expect([...PROXY_HEADERS].sort()).toEqual(['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'])
   })
