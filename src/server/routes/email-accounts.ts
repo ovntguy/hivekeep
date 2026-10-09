@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { config } from '@/server/config'
+import { loopbackOAuthOrigin } from '@/server/services/oauth-origin'
 import { createLogger } from '@/server/logger'
 import { getEmailProvider, listEmailProviders } from '@/server/email/registry'
 import { getContactsProvider } from '@/server/contacts/registry'
@@ -78,11 +79,16 @@ function sweepStates() {
  * Public origin for the OAuth redirect URI. MUST match what's registered in the
  * provider app exactly. Behind a TLS-terminating reverse proxy, `c.req.url` is
  * the internal http URL — wrong — so we resolve, in order:
+ *   0. a direct loopback request's own origin when PUBLIC_URL is http:// on a
+ *      private IPv4 (desktop window next to a LAN PUBLIC_URL; see
+ *      services/oauth-origin.ts)
  *   1. PUBLIC_URL (authoritative; the canonical fix for proxied deployments)
  *   2. X-Forwarded-Proto / X-Forwarded-Host (set by most reverse proxies)
  *   3. the request URL origin (direct access / dev)
  */
 function publicOrigin(c: Context): string {
+  const loopback = loopbackOAuthOrigin(c)
+  if (loopback) return loopback
   if (process.env.PUBLIC_URL) return new URL(config.publicUrl).origin
   const fwdProto = c.req.header('x-forwarded-proto')?.split(',')[0]?.trim()
   const fwdHost = (c.req.header('x-forwarded-host') ?? c.req.header('host'))?.split(',')[0]?.trim()
