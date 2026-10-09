@@ -88,7 +88,9 @@ function bunServer(env: unknown): BunServerLike | null {
 
 /** Read the direct-request facts for a Hono context served by Bun.serve. */
 export function directRequestInfo(c: Context): DirectRequest {
-  const proxied = PROXY_HEADERS.some((name) => !!c.req.header(name))
+  // has(), not a truthy value: an empty proxy header still means a proxy is in the path.
+  const headers = c.req.raw.headers
+  const proxied = PROXY_HEADERS.some((name) => headers.has(name))
   const server = bunServer(c.env)
   let remoteAddress: string | undefined
   try {
