@@ -101,6 +101,10 @@ export const webSearchTool: ToolRegistration = {
         'Search the web for current information. Returns a list of results with ' +
         'title, url, and snippet. Use `browse_url` afterwards to read the full ' +
         'content of any result.\n\n' +
+        'Do not use this tool to look up today\'s date or the current time — ' +
+        'those are already in Context. Write a specific query (topic, entity, ' +
+        'event, source), not generic phrases like "current date". Search engines ' +
+        'treat that literally (SQL GETDATE() docs, not the calendar).\n\n' +
         'Provider selection: pass `provider_slug` to use a specific provider, ' +
         'otherwise the configured default is used. Call `list_search_providers` ' +
         'first to discover what is configured and which capabilities each one ' +

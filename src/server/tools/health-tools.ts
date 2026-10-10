@@ -252,7 +252,7 @@ export const getSetupHealthTool: ToolRegistration = {
           issues.push({
             severity: 'info',
             problem: 'No search provider — Agents cannot do live web search.',
-            fix: 'Add one with request_provider_setup (e.g. "brave-search", "tavily", "serpapi", "perplexity"), then set_default_provider(capability:"search", …).',
+            fix: 'Add one with request_provider_setup (e.g. "brave-search", "tavily", "serpapi", "perplexity", "searxng") or type "mcp" pointed at a search tool on a configured MCP server, then set_default_provider(capability:"search", …).',
           })
         }
         if (!coverage.image.hasValidProvider) {

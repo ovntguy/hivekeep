@@ -1,8 +1,14 @@
-import { execSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
 import { dirname, join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync } from 'fs'
 import os from 'os'
 import { createLogger } from '@/server/logger'
+import {
+  defaultShellKind,
+  isWindowsPlatform,
+  joinPathEnv,
+  splitPathEnv,
+} from '@/server/services/host-platform'
 
 const log = createLogger('system-context')
 
@@ -15,6 +21,8 @@ export interface SystemContext {
   platform: string
   arch: string
   runtimes: RuntimeAvailability[]
+  /** Default run_shell interpreter: bash | powershell | pwsh | cmd */
+  defaultShell?: string
 }
 
 let cached: SystemContext | null = null
@@ -22,8 +30,8 @@ let cached: SystemContext | null = null
 // CLIs commonly needed by sub-Agents for builds, tests, version control and
 // language tooling. Probed once per server lifetime. We deliberately probe
 // through several PATH augmentation passes so non-login-shell deployments
-// (systemd user services, Docker, supervisord …) still pick up the runtimes
-// installed under the operator's profile.
+// (systemd user services, Docker, Task Scheduler, supervisord …) still pick
+// up the runtimes installed under the operator's profile.
 const PROBED_TOOLS = [
   'bun',
   'node',
@@ -32,10 +40,15 @@ const PROBED_TOOLS = [
   'yarn',
   'git',
   'python3',
+  'python',
+  'py',
   'docker',
   'rg',
   'curl',
   'gh',
+  'pwsh',
+  'powershell',
+  'winget',
 ]
 
 interface ProbeResult {
@@ -43,28 +56,31 @@ interface ProbeResult {
   binDir: string
 }
 
+function looksLikeAbsoluteBin(binPath: string): boolean {
+  if (isWindowsPlatform()) {
+    return /^[a-zA-Z]:[\\/]/.test(binPath) || binPath.startsWith('\\\\')
+  }
+  return binPath.startsWith('/')
+}
+
 /**
  * Augment `process.env.PATH` with directories that frequently hold language
- * runtimes when the host's default PATH is the minimal systemd default
- * (`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`).
+ * runtimes when the host's default PATH is the minimal service default.
  *
- * Three sources, in priority order:
- *   1. `dirname(process.execPath)` — the binary running Hivekeep itself. When
- *      this server is launched by Bun, this is the path to Bun.
- *   2. `HIVEKEEP_AUGMENT_PATH` env var (operator-controlled). Colon-separated
- *      list of directories prepended to PATH.
- *   3. A short list of well-known user-local bin dirs that exist on the
- *      filesystem (`~/.bun/bin`, `~/.local/bin`, `~/.nvm/versions/node/*\/bin`).
+ * Sources, in priority order:
+ *   1. `dirname(process.execPath)` — the binary running Hivekeep itself.
+ *   2. `HIVEKEEP_AUGMENT_PATH` env var (operator-controlled). Uses `;` on
+ *      Windows and `:` elsewhere.
+ *   3. Well-known user-local bin dirs (`~/.bun/bin`, Git for Windows, WinGet
+ *      links, nvm-windows, …).
  *
- * All additions are deduped against the current PATH. The augmentation is
- * idempotent — calling `getSystemContext()` twice does not double-augment
- * because `cached` short-circuits the call.
+ * Idempotent — `getSystemContext()` caches after the first call.
  */
 function augmentPath(): string[] {
   const additions: string[] = []
-  const seen = new Set((process.env.PATH ?? '').split(':').filter(Boolean))
+  const seen = new Set(splitPathEnv(process.env.PATH))
 
-  const push = (dir: string) => {
+  const push = (dir: string | undefined | null) => {
     if (!dir) return
     if (seen.has(dir)) return
     if (!existsSync(dir)) return
@@ -72,52 +88,66 @@ function augmentPath(): string[] {
     additions.push(dir)
   }
 
-  // 1. Runtime self — `process.execPath` is the binary serving the request.
   try {
     push(dirname(process.execPath))
   } catch {
     // ignore
   }
 
-  // 2. Operator override.
   const operatorPaths = process.env.HIVEKEEP_AUGMENT_PATH
   if (operatorPaths) {
-    for (const p of operatorPaths.split(':')) {
-      push(p.trim())
+    for (const p of splitPathEnv(operatorPaths)) {
+      push(p)
     }
   }
 
-  // 3. Well-known user-local bin dirs.
   const home = os.homedir()
   if (home) {
     push(join(home, '.bun', 'bin'))
     push(join(home, '.local', 'bin'))
-    // Glob ~/.nvm/versions/node/*/bin — pick the first node bin we find.
+    push(join(home, '.cargo', 'bin'))
+    push(join(home, 'go', 'bin'))
     try {
       const nvmRoot = join(home, '.nvm', 'versions', 'node')
       if (existsSync(nvmRoot)) {
-        const { readdirSync } = require('fs') as typeof import('fs')
         for (const v of readdirSync(nvmRoot)) {
           push(join(nvmRoot, v, 'bin'))
         }
       }
     } catch {
-      // ignore — nvm not installed
+      // nvm not installed
+    }
+  }
+
+  if (isWindowsPlatform()) {
+    const localAppData = process.env.LOCALAPPDATA ?? (home ? join(home, 'AppData', 'Local') : '')
+    const roaming = process.env.APPDATA ?? (home ? join(home, 'AppData', 'Roaming') : '')
+    const programFiles = process.env.ProgramFiles ?? 'C:\\Program Files'
+    const programFilesX86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'
+    push(join(localAppData, 'Microsoft', 'WinGet', 'Links'))
+    push(join(roaming, 'npm'))
+    push(join(programFiles, 'Git', 'cmd'))
+    push(join(programFiles, 'Git', 'bin'))
+    push(join(programFiles, 'nodejs'))
+    push(join(programFiles, 'PowerShell', '7'))
+    push(join(programFilesX86, 'Git', 'cmd'))
+    push(process.env.NVM_SYMLINK)
+    push(process.env.NVM_HOME)
+    if (home) {
+      push(join(home, 'scoop', 'shims'))
+      push(join(home, '.fnm'))
     }
   }
 
   if (additions.length > 0) {
-    const existing = process.env.PATH ?? ''
-    process.env.PATH = [...additions, existing].filter(Boolean).join(':')
+    process.env.PATH = joinPathEnv([...additions, ...splitPathEnv(process.env.PATH)])
   }
   return additions
 }
 
-function probe(tool: string): ProbeResult | null {
-  // `bash -lc` reads the operator's login profile (`~/.profile` / `~/.bash_profile`)
-  // so PATH additions from those files (typical of bun / nvm installers) are
-  // picked up. Interactive shells (which would source `~/.bashrc`) are
-  // intentionally not used — we don't want to inherit aliases.
+function probeUnix(tool: string): ProbeResult | null {
+  // `bash -lc` reads the operator's login profile so PATH additions from those
+  // files (typical of bun / nvm installers) are picked up.
   try {
     const out = execSync(
       `bash -lc 'p=$(command -v ${tool} 2>/dev/null) && echo "$p" && "${tool}" --version 2>&1 | head -n1'`,
@@ -131,25 +161,49 @@ function probe(tool: string): ProbeResult | null {
     if (lines.length < 2) return null
     const binPath = lines[0]!
     const version = lines[1]!
-    if (!binPath.startsWith('/')) return null
+    if (!looksLikeAbsoluteBin(binPath)) return null
     return { version, binDir: dirname(binPath) }
   } catch {
     return null
   }
 }
 
+function probeWindows(tool: string): ProbeResult | null {
+  try {
+    const whereOut = execFileSync('where.exe', [tool], {
+      encoding: 'utf-8',
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    const binPath = whereOut.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0]
+    if (!binPath || !looksLikeAbsoluteBin(binPath)) return null
+    let version = 'available'
+    try {
+      const verOut = execFileSync(binPath, ['--version'], {
+        encoding: 'utf-8',
+        timeout: 3000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      const first = verOut.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0]
+      if (first) version = first
+    } catch {
+      // Some Windows CLIs (winget, powershell) don't honor --version.
+    }
+    return { version, binDir: dirname(binPath) }
+  } catch {
+    return null
+  }
+}
+
+function probe(tool: string): ProbeResult | null {
+  return isWindowsPlatform() ? probeWindows(tool) : probeUnix(tool)
+}
+
 /**
  * Get the host system context (platform, arch, available CLIs).
  *
- * Side effect on first call: augments `process.env.PATH` with `process.execPath`,
- * operator-defined `HIVEKEEP_AUGMENT_PATH`, and well-known user-local bin
- * dirs, THEN probes each tool. The augmentation is what fixes the prod
- * scenario observed on prod task `e6c9d6f1`: the systemd user
- * service started with the default PATH and `bun` lived in `~/.bun/bin`,
- * which neither the inherited PATH nor `bash -lc`'s login profile knew
- * about, so the agent burned ~10 calls re-discovering it.
- *
- * Cached after the first call — these values do not change at runtime.
+ * Side effect on first call: augments `process.env.PATH`, then probes each
+ * tool. Cached after the first call.
  */
 export function getSystemContext(): SystemContext {
   if (cached) return cached
@@ -167,17 +221,13 @@ export function getSystemContext(): SystemContext {
     probedDirs.add(result.binDir)
   }
 
-  // A tool's resolved bin dir may itself be a new directory the augmentation
-  // step missed (e.g. `bash -lc` sourced a profile that prepended something).
-  // Fold those in too so `run_shell` (which inherits process.env) finds the
-  // same binaries.
-  const existing = new Set((process.env.PATH ?? '').split(':').filter(Boolean))
+  const existing = new Set(splitPathEnv(process.env.PATH))
   const postProbeAdditions: string[] = []
   for (const dir of probedDirs) {
     if (!existing.has(dir)) postProbeAdditions.push(dir)
   }
   if (postProbeAdditions.length > 0) {
-    process.env.PATH = [...postProbeAdditions, ...existing].join(':')
+    process.env.PATH = joinPathEnv([...postProbeAdditions, ...splitPathEnv(process.env.PATH)])
     log.info({ added: postProbeAdditions }, 'PATH augmented with detected tool dirs')
   }
 
@@ -185,9 +235,15 @@ export function getSystemContext(): SystemContext {
     platform: os.platform(),
     arch: os.arch(),
     runtimes,
+    defaultShell: defaultShellKind(),
   }
   log.info(
-    { platform: cached.platform, arch: cached.arch, runtimes: runtimes.map((r) => r.name) },
+    {
+      platform: cached.platform,
+      arch: cached.arch,
+      defaultShell: cached.defaultShell,
+      runtimes: runtimes.map((r) => r.name),
+    },
     'System context probed',
   )
   return cached

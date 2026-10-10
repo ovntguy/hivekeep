@@ -143,7 +143,7 @@ The same building blocks cover a DevOps copilot, a home brain, a personal knowle
 
 ## Providers and plugins
 
-Bring one config per provider and Hivekeep auto-detects its capabilities (`llm`, `embedding`, `image`, `search`, `stt`, `tts`). **Built in today:** Anthropic (API key, or Claude Max via in-app sign-in, no CLI needed), OpenAI (API key, or Codex via in-app sign-in, no CLI needed), Google Gemini, OpenRouter (LLM, embeddings, images), Kilo Gateway, Ollama Cloud (LLM and web search), xAI, DeepSeek, MiniMax, Kimi (Moonshot), and a generic **OpenAI-compatible** connector (your own base URL, for NewAPI / LiteLLM / llama.cpp / LM Studio / vLLM / Ollama) for LLMs, embeddings, and image generation (OpenAI Images API: `/images/generations`); OpenAI, Gemini, and OpenRouter for images as well; OpenRouter for embeddings as well; OpenAI and ElevenLabs for speech-to-text and text-to-speech; Brave Search, SerpAPI, Tavily, Perplexity Sonar, and Ollama Cloud for web search. Need more? Add any provider as a **plugin** through the typed SDK, no fork required. Local models whose backend lacks native tool calling (e.g. Gemma on Ollama) still get tools through an automatic prompt-based fallback. Chat-only OpenAI-compatible servers (stock Ollama, llama.cpp) do not implement image generation — use a gateway that exposes the Images API, or the branded OpenAI / Gemini providers.
+Bring one config per provider and Hivekeep auto-detects its capabilities (`llm`, `embedding`, `image`, `search`, `stt`, `tts`). **Built in today:** Anthropic (API key, or Claude Max via in-app sign-in, no CLI needed), OpenAI (API key, or Codex via in-app sign-in, no CLI needed), Google Gemini, OpenRouter (LLM, embeddings, images), Kilo Gateway, Ollama Cloud (LLM and web search), xAI (API key, or SuperGrok via in-app sign-in, no CLI needed), DeepSeek, MiniMax, Kimi (Moonshot), and a generic **OpenAI-compatible** connector (your own base URL, for NewAPI / LiteLLM / llama.cpp / LM Studio / vLLM / Ollama) for LLMs, embeddings, and image generation (OpenAI Images API: `/images/generations`); OpenAI, Gemini, and OpenRouter for images as well; OpenRouter for embeddings as well; OpenAI and ElevenLabs for speech-to-text and text-to-speech; Brave Search, SerpAPI, Tavily, Perplexity Sonar, and Ollama Cloud for web search. Need more? Add any provider as a **plugin** through the typed SDK, no fork required. Local models whose backend lacks native tool calling (e.g. Gemma on Ollama) still get tools through an automatic prompt-based fallback. Chat-only OpenAI-compatible servers (stock Ollama, llama.cpp) do not implement image generation — use a gateway that exposes the Images API, or the branded OpenAI / Gemini providers.
 
 ---
 
@@ -192,6 +192,10 @@ curl -fsSL https://raw.githubusercontent.com/MarlBurroW/hivekeep/main/install.sh
 The script installs [Bun](https://bun.sh) if needed, clones the repo, builds the frontend, runs migrations, creates a system service (systemd or launchd), and starts Hivekeep on port **3000**. It preflights disk, RAM, ports, and connectivity, and rolls back cleanly on failure.
 
 Then open `http://localhost:3000` and **Queenie takes it from there**: three quick screens, then she configures everything by conversation.
+
+### Windows 11 (native Bun, no WSL)
+
+`install.sh` is Linux/macOS only. On Windows 11 you can run Hivekeep with native Bun (no WSL, no Docker): see **[docs/windows.md](docs/windows.md)** (runbook + Task Scheduler) and `scripts/windows/`. Known limitations: [docs/windows-gaps.md](docs/windows-gaps.md).
 
 ### Docker (alternative)
 
@@ -307,7 +311,7 @@ Generic multi-provider OAuth2 (Google, Microsoft 365, Apple). Mail (Gmail, Outlo
 NPM-based plugins, typed TypeScript SDK (`@hivekeep/sdk`). Built-in marketplace (keyword `hivekeep-plugin`, live npm search) + Git install. Strict declarative manifest with granular permissions. Native AI tools, native provider families (LLM, embedding, image, search, TTS, STT + email/contacts/calendar), channel adapters, lifecycle hooks, interactive cards, per-plugin storage, permission-controlled HTTP, namespaced vault, scaffold CLI (`create-hivekeep-plugin`), auto-disable on error.
 
 #### 9. Toolboxes and tool scoping
-Dynamic composition of `CORE_TOOLS` plus toolboxes, resolved each turn (hot reload). Nine built-in toolboxes (code, research, ops, scout, all, email, calendar, address-book, configurator). Smart wildcard (`all`/`*` covers natives + enabled custom, never MCP/plugin). Flexible assignment (Agent, task, cron, webhook), sub-Agent hard floor, scout delegation to a cheap read-only model.
+Dynamic composition of `CORE_TOOLS` plus toolboxes, resolved each turn (hot reload). Ten built-in toolboxes (code, research, ops, scout, all, email, calendar, address-book, windows, configurator). Smart wildcard (`all`/`*` covers natives + enabled custom, never MCP/plugin). Flexible assignment (Agent, task, cron, webhook), sub-Agent hard floor, scout delegation to a cheap read-only model. On Windows 11, `run_shell` defaults to PowerShell and every Agent's Environment prompt includes Windows CLI knowledge.
 
 #### 10. Context and token transparency
 Context Viewer (stacked multicolor bar by section + detailed table). Granular per-section estimation. Provider-agnostic cache observability (read/write/fresh tokens, hit rate, residual TTL). Per-Agent EMA calibration. Exhaustive per-call usage tracking (`llm_usage`). Sensitive tool-result masking before summarization. Budget-based history trimming.
@@ -356,7 +360,7 @@ Full details in the [technical docs](https://marlburrow.github.io/hivekeep/docs/
 | **Runtime** | [Bun](https://bun.sh) |
 | **Backend** | [Hono](https://hono.dev), [Drizzle ORM](https://orm.drizzle.team), bun:sqlite, [sqlite-vec](https://github.com/asg017/sqlite-vec), native LLM primitives (`src/server/llm/*`), [Better Auth](https://www.better-auth.com), [croner](https://github.com/Hexagon/croner) |
 | **Frontend** | [React](https://react.dev), [Vite](https://vite.dev), [Tailwind CSS](https://tailwindcss.com), [shadcn/ui](https://ui.shadcn.com), [i18next](https://www.i18next.com) |
-| **LLM providers** | Anthropic, OpenAI, Google Gemini, OpenRouter, xAI, DeepSeek, MiniMax, Kimi, OpenAI-compatible (any custom base URL) (plus image, embedding, search, and speech providers; more via plugins) |
+| **LLM providers** | Anthropic, OpenAI, Google Gemini, OpenRouter, xAI (API key or SuperGrok sign-in), DeepSeek, MiniMax, Kimi, OpenAI-compatible (any custom base URL) (plus image, embedding, search, and speech providers; more via plugins) |
 | **Database** | SQLite (single file) + FTS5 + sqlite-vec |
 
 ---

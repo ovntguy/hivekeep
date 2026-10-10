@@ -27,6 +27,9 @@ export interface ProviderModel {
    *  Absent = not a reasoning model (or unknown); `efforts: []` = reasoning
    *  toggle-only (no granularity). Drives the effort selectors. */
   thinking?: { efforts: AgentThinkingEffort[]; note?: string }
+  /** LLM-family only — effective tools-per-request cap (model override,
+   *  else provider default, else 128). `0` means the model cannot call tools. */
+  maxTools?: number
 }
 
 /**

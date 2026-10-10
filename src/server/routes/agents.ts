@@ -1503,7 +1503,13 @@ agentRoutes.get('/:id/export', async (c) => {
             .where(eq(mcpServers.id, row.serverId))
             .limit(1)
           return server
-            ? { name: server.name, command: server.command, args: server.args }
+            ? {
+                name: server.name,
+                transport: server.transport ?? 'stdio',
+                command: server.command,
+                args: server.args,
+                url: server.url ?? null,
+              }
             : null
         }),
       ).then((results) => results.filter(Boolean))

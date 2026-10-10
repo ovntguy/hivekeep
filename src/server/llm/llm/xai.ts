@@ -60,9 +60,10 @@ import type {
 } from '@/server/llm/llm/types'
 import { downgradeEffort } from '@/server/llm/llm/types'
 
-const BASE_URL = 'https://api.x.ai/v1'
+export const XAI_API_BASE = 'https://api.x.ai/v1'
+const BASE_URL = XAI_API_BASE
 
-// ─── Config schema ───────────────────────────────────────────────────────────
+// ─── Config schema ───────────────────────────────────────────────────────
 
 const CONFIG_SCHEMA: readonly ConfigField[] = [
   {
@@ -94,7 +95,7 @@ export interface XaiLanguageModel {
   completion_text_token_price?: number | null
 }
 
-// ─── Metadata-driven model classification ────────────────────────────────────
+// ─── Metadata-driven model classification ──────────────────────────────────
 
 /**
  * Vision support: xAI exposes `input_modalities`. A model accepts image
@@ -170,19 +171,12 @@ export function mapModel(model: XaiLanguageModel): LLMModel | null {
   return out
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────
 
 function getApiKey(config: ProviderConfig): string {
   const apiKey = config['apiKey']
   if (!apiKey) throw new AuthError('Missing xAI API key')
   return apiKey
-}
-
-function createClient(config: ProviderConfig): OpenAI {
-  return new OpenAI({
-    apiKey: getApiKey(config),
-    baseURL: BASE_URL,
-  })
 }
 
 function mapFinishReason(
@@ -231,6 +225,9 @@ function mapApiError(err: unknown): HivekeepProviderError {
   }
   return new NetworkError(String(err))
 }
+
+/** @internal exported for the SuperGrok OAuth provider. */
+export const mapXaiApiError = mapApiError
 
 function parseRetryAfter(header: string | string[] | undefined): number | undefined {
   if (!header) return undefined
@@ -438,7 +435,109 @@ async function* streamChat(
   }
 }
 
-// ─── Provider implementation ─────────────────────────────────────────────────
+/**
+ * List chat models using a bearer token (API key or SuperGrok OAuth access token).
+ *
+ * Prefers `GET /v1/language-models` (modalities + pricing). Some SuperGrok
+ * tiers 403 that richer catalogue; fall back to `GET /v1/models` so the
+ * subscription path still lists grok-* ids.
+ *
+ * @internal exported for the SuperGrok OAuth provider.
+ */
+export async function fetchXaiChatModels(token: string): Promise<LLMModel[]> {
+  const headers = { Authorization: `Bearer ${token}` }
+
+  const langRes = await fetch(`${BASE_URL}/language-models`, { headers })
+  if (langRes.ok) {
+    const payload = (await langRes.json()) as { models?: XaiLanguageModel[] }
+    const models: LLMModel[] = []
+    for (const raw of payload.models ?? []) {
+      const mapped = mapModel(raw)
+      if (mapped) models.push(mapped)
+    }
+    return models
+  }
+
+  // SuperGrok OAuth is known to 403 /language-models on some tiers. The
+  // OpenAI-compatible /models listing is the documented fallback.
+  if (langRes.status === 401 || langRes.status === 403 || langRes.status === 404) {
+    const modelsRes = await fetch(`${BASE_URL}/models`, { headers })
+    if (!modelsRes.ok) {
+      if (modelsRes.status === 401 || modelsRes.status === 403) {
+        throw new AuthError(
+          `xAI rejected the credential (HTTP ${modelsRes.status}). SuperGrok OAuth API access may be restricted to certain tiers — use an API key if this persists.`,
+        )
+      }
+      throw new ProviderServerError(
+        `xAI /models returned HTTP ${modelsRes.status}`,
+        modelsRes.status,
+      )
+    }
+    const payload = (await modelsRes.json()) as {
+      data?: Array<{ id?: string; object?: string }>
+    }
+    const models: LLMModel[] = []
+    for (const raw of payload.data ?? []) {
+      if (!raw.id) continue
+      // Drop image/video generators that appear on the mixed /models list.
+      if (/imagine|image|video/i.test(raw.id)) continue
+      const mapped = mapModel({ id: raw.id })
+      if (mapped) models.push(mapped)
+    }
+    return models
+  }
+
+  throw new ProviderServerError(
+    `xAI /language-models returned HTTP ${langRes.status}`,
+    langRes.status,
+  )
+}
+
+/**
+ * Stream a chat completion against api.x.ai using a bearer token.
+ * @internal exported for the SuperGrok OAuth provider.
+ */
+export function streamXaiChat(
+  token: string,
+  model: LLMModel,
+  request: ChatRequest,
+): AsyncIterable<ChatChunk> {
+  const client = new OpenAI({ apiKey: token, baseURL: BASE_URL })
+  const system = systemPromptToMessage(request.system)
+
+  const params: ChatCompletionCreateParamsStreaming = {
+    model: model.id,
+    messages: messagesToOpenAI(request.messages, system),
+    stream: true,
+    stream_options: { include_usage: true },
+  }
+
+  const tools = toolsToOpenAI(request.tools)
+  if (tools) params.tools = tools
+
+  if (request.maxOutputTokens != null) {
+    params.max_tokens = request.maxOutputTokens
+  }
+  if (request.temperature != null) {
+    params.temperature = request.temperature
+  }
+
+  if (request.thinkingEffort && model.thinking?.efforts?.length) {
+    const chosen = downgradeEffort(request.thinkingEffort, model.thinking.efforts)
+    if (chosen) {
+      const effort = chosen === 'max' ? 'high' : chosen
+      params.reasoning_effort = effort as ReasoningEffort
+    }
+  }
+
+  if (request.metadata?.userId) {
+    params.user = request.metadata.userId
+  }
+
+  return streamChat(client, params, request.signal)
+}
+
+// ─── Provider implementation ─────────────────────────────────────────
 
 export const xaiProvider: LLMProvider = {
   type: 'xai',
@@ -468,70 +567,14 @@ export const xaiProvider: LLMProvider = {
   },
 
   async listModels(config: ProviderConfig): Promise<LLMModel[]> {
-    const apiKey = getApiKey(config)
-    let payload: { models?: XaiLanguageModel[] }
     try {
-      const res = await fetch(`${BASE_URL}/language-models`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      })
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          throw new AuthError(`xAI rejected the API key (HTTP ${res.status})`)
-        }
-        throw new ProviderServerError(
-          `xAI /language-models returned HTTP ${res.status}`,
-          res.status,
-        )
-      }
-      payload = (await res.json()) as { models?: XaiLanguageModel[] }
+      return await fetchXaiChatModels(getApiKey(config))
     } catch (err) {
       throw mapApiError(err)
     }
-
-    const models: LLMModel[] = []
-    for (const raw of payload.models ?? []) {
-      const mapped = mapModel(raw)
-      if (mapped) models.push(mapped)
-    }
-    return models
   },
 
   chat(model, request, config) {
-    const client = createClient(config)
-    const system = systemPromptToMessage(request.system)
-
-    const params: ChatCompletionCreateParamsStreaming = {
-      model: model.id,
-      messages: messagesToOpenAI(request.messages, system),
-      stream: true,
-      stream_options: { include_usage: true },
-    }
-
-    const tools = toolsToOpenAI(request.tools)
-    if (tools) params.tools = tools
-
-    if (request.maxOutputTokens != null) {
-      params.max_tokens = request.maxOutputTokens
-    }
-    if (request.temperature != null) {
-      params.temperature = request.temperature
-    }
-
-    // Reasoning: Grok reasoning models accept the OpenAI-compatible
-    // `reasoning_effort` string. Only send it when the model advertises
-    // reasoning support and an effort was requested.
-    if (request.thinkingEffort && model.thinking?.efforts?.length) {
-      const chosen = downgradeEffort(request.thinkingEffort, model.thinking.efforts)
-      if (chosen) {
-        const effort = chosen === 'max' ? 'high' : chosen
-        params.reasoning_effort = effort as ReasoningEffort
-      }
-    }
-
-    if (request.metadata?.userId) {
-      params.user = request.metadata.userId
-    }
-
-    return streamChat(client, params, request.signal)
+    return streamXaiChat(getApiKey(config), model, request)
   },
 }

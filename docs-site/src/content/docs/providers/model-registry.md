@@ -70,7 +70,7 @@ When a match is low-confidence (`family`) or absent (`none`), the row is flagged
 - **Confirm** (✓) if the auto-match looks right: clears the flag and enables it.
 - **Remap** (in the edit dialog) to point the row at the correct models.dev entry,
   searchable across the whole catalogue. Useful for subscription/CLI providers
-  (Claude Pro/Max, Codex) whose ids map onto the base provider's entries.
+  (Claude Pro/Max, Codex, SuperGrok) whose ids map onto the base provider's entries.
 
 Models genuinely absent from models.dev (niche or brand-new) stay unmapped; set
 their metadata manually, or refresh the snapshot once models.dev has them.

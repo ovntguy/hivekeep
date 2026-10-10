@@ -34,6 +34,8 @@ export interface ProviderTypeInfo {
   brandColor?: string
   source: 'builtin' | 'plugin'
   configSchema?: ConfigField[]
+  /** Present when the provider declares an in-app PKCE sign-in. */
+  oauth?: { redirectStyle: 'page' | 'loopback' }
 }
 
 /**

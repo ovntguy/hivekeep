@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test'
-import { assistantMessage, mapModel, type OpenAICompatibleModel } from './openai-compatible'
+import {
+  applyExtraBody,
+  assistantMessage,
+  EXTRA_BODY_RESERVED_KEYS,
+  mapModel,
+  parseExtraBody,
+  type OpenAICompatibleModel,
+} from './openai-compatible'
 
 // Representative fixtures drawn from a generic OpenAI-compatible /models
 // payload: the bare OpenAI listing `{object:'list', data:[{id, ...}]}`.
@@ -75,5 +82,60 @@ describe('listModels payload shape', () => {
     }
     const mapped = payload.data.map(mapModel).filter((m): m is NonNullable<typeof m> => m !== null)
     expect(mapped.map((m) => m.id)).toEqual(['llama-3.1-8b', 'qwen2.5-7b-instruct'])
+  })
+})
+
+describe('extraBody', () => {
+  it('parses llama.cpp DRY sampling knobs', () => {
+    expect(
+      parseExtraBody(
+        '{"dry_multiplier":0.8,"dry_base":1.75,"dry_allowed_length":2,"dry_penalty_last_n":-1}',
+      ),
+    ).toEqual({
+      dry_multiplier: 0.8,
+      dry_base: 1.75,
+      dry_allowed_length: 2,
+      dry_penalty_last_n: -1,
+    })
+  })
+
+  it('treats empty extraBody as no extras', () => {
+    expect(parseExtraBody(undefined)).toEqual({})
+    expect(parseExtraBody('')).toEqual({})
+    expect(parseExtraBody('   ')).toEqual({})
+  })
+
+  it('rejects non-object JSON', () => {
+    expect(() => parseExtraBody('[]')).toThrow(/JSON object/)
+    expect(() => parseExtraBody('"nope"')).toThrow(/JSON object/)
+    expect(() => parseExtraBody('{')).toThrow(/JSON object/)
+  })
+
+  it('merges extras but keeps host fields', () => {
+    const params = {
+      model: 'qwen2.5-7b-instruct',
+      messages: [{ role: 'user' as const, content: 'hi' }],
+      stream: true,
+      temperature: 0,
+    }
+    const merged = applyExtraBody(params, {
+      dry_multiplier: 0.8,
+      dry_base: 1.75,
+      dry_allowed_length: 2,
+      dry_penalty_last_n: -1,
+      temperature: 0.7,
+      prompt: '<your_prompt_here>',
+      stream: false,
+      model: 'hijack',
+    })
+    expect(merged['dry_multiplier']).toBe(0.8)
+    expect(merged['dry_base']).toBe(1.75)
+    expect(merged['dry_allowed_length']).toBe(2)
+    expect(merged['dry_penalty_last_n']).toBe(-1)
+    expect(merged['temperature']).toBe(0)
+    expect(merged['stream']).toBe(true)
+    expect(merged['model']).toBe('qwen2.5-7b-instruct')
+    expect(merged).not.toHaveProperty('prompt')
+    expect(EXTRA_BODY_RESERVED_KEYS.has('temperature')).toBe(true)
   })
 })

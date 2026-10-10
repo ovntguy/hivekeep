@@ -24,7 +24,7 @@ mock.module('@/server/logger', () => ({
 }))
 
 // Import after mocks
-const { runShellTool, detectShellWrapper, detectHookBypass } = await import('./shell-tools')
+const { runShellTool, detectShellWrapper, detectHookBypass, buildRunShellDescription } = await import('./shell-tools')
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -63,6 +63,12 @@ describe('runShellTool', () => {
     it('creates a tool with description', () => {
       const t = createTool() as any
       expect(t.description).toContain('shell')
+    })
+
+    it('describes PowerShell as the default on Windows', () => {
+      expect(buildRunShellDescription('powershell')).toContain('PowerShell')
+      expect(buildRunShellDescription('powershell')).toContain('shell=bash')
+      expect(buildRunShellDescription('bash')).toContain('bash -c')
     })
   })
 
@@ -310,6 +316,29 @@ describe('runShellTool', () => {
       expect(detectShellWrapper('   CAT file.ts')).toEqual({ binary: 'cat', suggestion: expect.stringContaining('read_file'), reason: 'wrapper' })
       expect(detectShellWrapper('LS')).toEqual({ binary: 'ls', suggestion: expect.stringContaining('list_directory'), reason: 'wrapper' })
     })
+
+    it('refuses PowerShell file wrappers', () => {
+      expect(detectShellWrapper('Get-Content src/index.ts')?.binary.toLowerCase()).toBe('get-content')
+      expect(detectShellWrapper('gc package.json')?.suggestion).toContain('read_file')
+      expect(detectShellWrapper('Get-ChildItem src')?.suggestion).toContain('list_directory')
+      expect(detectShellWrapper('gci .')?.reason).toBe('wrapper')
+      expect(detectShellWrapper('Select-String foo src/')?.suggestion).toContain('grep')
+      expect(detectShellWrapper('dir src')?.suggestion).toContain('list_directory')
+      expect(detectShellWrapper('findstr foo src/index.ts')?.suggestion).toContain('grep')
+      expect(detectShellWrapper('type package.json')?.binary).toBe('type')
+    })
+
+    it('strips Set-Location before PowerShell wrapper detection', () => {
+      expect(detectShellWrapper('Set-Location hivekeep; Get-Content src/index.ts')?.reason).toBe('wrapper')
+    })
+
+    it('refuses Get-Content pipelines of project files', () => {
+      expect(detectShellWrapper('Get-Content src/client/pages/chat/ChatPage.tsx | Select-Object -First 90')?.reason).toBe('wrapper')
+    })
+
+    it('does not treat bash `type bun` as a file read', () => {
+      expect(detectShellWrapper('type bun')).toBeNull()
+    })
   })
 
   describe('banned commands (network / browser)', () => {
@@ -358,6 +387,12 @@ describe('runShellTool', () => {
       const wrapper = detectShellWrapper('cat file.ts')
       expect(banned?.reason).toBe('banned')
       expect(wrapper?.reason).toBe('wrapper')
+    })
+
+    it('refuses PowerShell HTTP cmdlets', () => {
+      expect(detectShellWrapper('Invoke-WebRequest https://example.com')?.suggestion).toContain('http_request')
+      expect(detectShellWrapper('iwr https://example.com')?.reason).toBe('banned')
+      expect(detectShellWrapper('Invoke-RestMethod https://example.com')?.reason).toBe('banned')
     })
   })
 

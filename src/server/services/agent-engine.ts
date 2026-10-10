@@ -36,6 +36,7 @@ import { eventBus } from '@/server/services/events'
 import { hookRegistry } from '@/server/hooks/index'
 import { config } from '@/server/config'
 import { getProfile } from '@/server/services/agent-profile'
+import { getSystemContext } from '@/server/services/system-context'
 import { maybeCompact, resolveCompactionBoundary, isAfterCompactionBoundary } from '@/server/services/compacting'
 import { getMCPToolsSummary } from '@/server/services/mcp'
 import { resolveToolset } from '@/server/services/toolset-resolver'
@@ -1495,6 +1496,7 @@ export async function processNextMessage(agentId: string): Promise<boolean> {
         oldestVisibleMessageAt,
       },
       workspacePath: agent.workspacePath,
+      systemContext: getSystemContext(),
       // When the model declares maxTools=0 (Replicate-style non-tool-
       // calling completion model), strip every tool-related section
       // of the prompt — otherwise the model sees "use these tools"
@@ -2505,6 +2507,7 @@ export async function processQuickMessage(agentId: string): Promise<boolean> {
       globalPrompt,
       userLanguage,
       workspacePath: agent.workspacePath,
+      systemContext: getSystemContext(),
       // Same model-driven tool gating as the main queue path.
       toolsEnabled: getMaxToolsForRequest(qsResolved.providerRow.type, qsResolved.model) > 0,
     })

@@ -17,7 +17,7 @@
  * (namespace-gated to the plugin's own providers — see plugins.ts).
  */
 import { getLLMProvider } from '@/server/llm/llm/registry'
-import { decodeJwtClaims, type PkceClient } from '@/server/llm/llm/_oauth-pkce'
+import { decodeJwtClaims, encodeTokenRequest, type PkceClient } from '@/server/llm/llm/_oauth-pkce'
 import {
   readTokenBundle,
   writeTokenBundle,
@@ -59,14 +59,15 @@ interface RefreshResponse {
 }
 
 async function refreshGrant(client: PkceClient, refreshToken: string): Promise<RefreshResponse> {
+  const encoded = encodeTokenRequest(client, {
+    grant_type: 'refresh_token',
+    client_id: client.clientId,
+    refresh_token: refreshToken,
+  })
   const resp = await fetch(client.tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'refresh_token',
-      client_id: client.clientId,
-      refresh_token: refreshToken,
-    }),
+    headers: encoded.headers,
+    body: encoded.body,
   })
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')

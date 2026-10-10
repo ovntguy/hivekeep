@@ -67,6 +67,7 @@ const PROVIDER_ID_MAP: Record<string, string> = {
   // provider, so they match the base provider's models.dev entries.
   'anthropic-oauth': 'anthropic', // Claude Pro/Max (used by Claude Code)
   'openai-codex': 'openai', // OpenAI Codex CLI subscription
+  'xai-oauth': 'xai', // SuperGrok / X Premium+ subscription
 }
 export function toModelsDevProviderId(providerType: string): string {
   return PROVIDER_ID_MAP[providerType] ?? providerType

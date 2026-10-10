@@ -32,6 +32,7 @@ import { X, Zap, MessageSquare, LogOut, History, Pin, PinOff } from 'lucide-reac
 import type { AgentThinkingEffort } from '@/shared/types'
 import { AgentToolsModal } from '@/client/components/agent/AgentToolsModal'
 import { useAgentTools } from '@/client/hooks/useAgentTools'
+import { listedModelMaxTools } from '@/client/lib/model-max-tools'
 import { useAutoScroll } from '@/client/hooks/useAutoScroll'
 import { cn } from '@/client/lib/utils'
 import { ContextBar } from '@/client/components/chat/ContextBar'
@@ -44,6 +45,7 @@ interface LLMModel {
   providerName: string
   providerType: string
   capability: string
+  maxTools?: number
 }
 
 interface QuickChatPanelProps {
@@ -71,6 +73,11 @@ export function QuickChatPanel({ agentId, agentName, agentAvatarUrl, agentModel,
   // Tools badge: the quick-session variant of the resolved toolset (the
   // session-excluded tools — tasks, crons, inter-agent… — are not counted).
   const { tools: quickTools, count: quickToolCount, refetch: refetchQuickTools } = useAgentTools(agentId, { quick: true })
+  const maxTools = listedModelMaxTools(
+    llmModels ?? [],
+    session?.model ?? agentModel,
+    session?.providerId ?? null,
+  )
   const [toolsModalOpen, setToolsModalOpen] = useState(false)
   const { toolCallsByMessage } = useToolCalls(agentId, messages)
   const { content: draftContent, setContent: setDraftContent, clearDraft } = useDraftMessage(`quick-${sessionId}`)
@@ -301,6 +308,7 @@ export function QuickChatPanel({ agentId, agentName, agentAvatarUrl, agentModel,
         thinkingEffort={session?.thinkingEffort ?? agentThinkingEffort ?? null}
         onChangeThinking={(next) => void updateSessionOverrides({ thinkingEnabled: next.enabled, thinkingEffort: next.effort })}
         toolCount={quickToolCount}
+        maxTools={maxTools}
         onShowTools={() => { void refetchQuickTools(); setToolsModalOpen(true) }}
       />
 
@@ -312,6 +320,7 @@ export function QuickChatPanel({ agentId, agentName, agentAvatarUrl, agentModel,
           agentId={agentId}
           agentName={agentName}
           tools={quickTools}
+          maxTools={maxTools}
           isQuickSession
           onEditTools={onEditTools}
         />

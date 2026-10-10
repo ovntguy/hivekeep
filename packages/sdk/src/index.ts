@@ -1115,7 +1115,7 @@ export interface LLMProvider extends ProviderUIHints {
    * user's flat-rate plan is used before their metered key.
    *
    * - `subscription` — flat-rate plan (Claude Max, ChatGPT Plus via
-   *                    Codex CLI, …). Auto-resolution prefers this.
+   *                    Codex CLI, SuperGrok, …). Auto-resolution prefers this.
    * - `per-token`   — metered API key (default for most providers).
    * - `local`       — local model, no upstream cost (Ollama-style).
    *
@@ -1477,7 +1477,7 @@ export interface SearchResult {
 
 /**
  * Native search provider interface — plugins implement this directly,
- * built-in providers (Brave, SerpAPI, Tavily, Perplexity Sonar) use
+ * built-in providers (Brave, SerpAPI, Tavily, Perplexity Sonar, SearXNG, MCP) use
  * the same shape.
  *
  * Search providers have no `listModels()` (one provider == one search

@@ -48,6 +48,19 @@ If your compose file pins a specific version tag (e.g. `ghcr.io/marlburrow/hivek
 
 Your data lives in the mounted volume (`/app/data`), so replacing the image is safe.
 
+## Updating a Windows 11 native install
+
+The bash installer and in-app updater are built around systemd, launchd, or Docker. On the native Bun Windows path, stop the process, pull, reinstall, and start:
+
+```powershell
+.\scripts\windows\Stop-Hivekeep.ps1
+git pull
+.\scripts\windows\Install-Hivekeep.ps1
+.\scripts\windows\Start-Hivekeep.ps1
+```
+
+See [docs/windows.md](https://github.com/MarlBurroW/hivekeep/blob/main/docs/windows.md) in the repository. Known gaps: [docs/windows-gaps.md](https://github.com/MarlBurroW/hivekeep/blob/main/docs/windows-gaps.md).
+
 ## Configuration
 
 | Variable | Default | Description |

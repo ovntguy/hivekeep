@@ -5,12 +5,26 @@ import { v4 as uuid } from 'uuid'
 import { db } from '@/server/db/index'
 import { mcpServers, agentMcpServers } from '@/server/db/schema'
 import { disconnectServer } from '@/server/services/mcp'
+import {
+  isRemoteMcpTransport,
+  mergeSecretRecord,
+  normalizeMcpTransport,
+  parseArgs,
+  parseSecretRecord,
+  serializeSecretJson,
+  validateMcpServerConfig,
+} from '@/server/services/mcp-config'
 import { sseManager } from '@/server/sse/index'
 import { config } from '@/server/config'
 import { createLogger } from '@/server/logger'
 import type { ToolRegistration } from '@/server/tools/types'
+import type { McpTransport } from '@/shared/types'
 
 const log = createLogger('tools:mcp')
+
+const transportSchema = z.enum(['stdio', 'http', 'sse']).optional().describe(
+  'How to connect: stdio (local command, default), http (Streamable HTTP URL), or sse (legacy remote SSE).',
+)
 
 /**
  * add_mcp_server — create a new MCP server on the platform.
@@ -23,29 +37,44 @@ export const addMcpServerTool: ToolRegistration = {
   create: (ctx) =>
     tool({
       description:
-        'Add a new MCP server. Auto-assigned to you. May require user approval.',
+        'Add a new MCP server (local stdio command, or remote HTTP/SSE URL). Auto-assigned to you. May require user approval.',
       inputSchema: z.object({
         name: z.string(),
-        command: z.string().describe('Executable (e.g. "npx", "node", "python")'),
-        args: z
-          .array(z.string())
-          .optional(),
-        env: z
-          .record(z.string(), z.string())
-          .optional(),
+        transport: transportSchema,
+        command: z.string().optional().describe('Executable for stdio (e.g. "npx", "node", "python")'),
+        args: z.array(z.string()).optional(),
+        env: z.record(z.string(), z.string()).optional(),
+        url: z.string().optional().describe('Remote MCP server URL (required for http/sse)'),
+        headers: z.record(z.string(), z.string()).optional().describe('HTTP headers for remote servers (Authorization, API keys). Values are stored and never shown back.'),
       }),
-      execute: async ({ name, command, args, env }) => {
+      execute: async ({ name, transport: rawTransport, command, args, env, url, headers }) => {
         try {
+          const transport = normalizeMcpTransport(rawTransport)
+          const validation = validateMcpServerConfig({
+            name,
+            transport,
+            command: command ?? '',
+            url: url?.trim() || null,
+            args: args ?? null,
+            env: env ?? null,
+            headers: headers ?? null,
+          })
+          if (!validation.ok) return { error: validation.message }
+
           const id = uuid()
           const now = new Date()
           const status = config.mcp.requireApproval ? 'pending_approval' : 'active'
+          const remote = isRemoteMcpTransport(transport)
 
           await db.insert(mcpServers).values({
             id,
             name,
-            command,
-            args: args ? JSON.stringify(args) : null,
-            env: env ? JSON.stringify(env) : null,
+            command: remote ? '' : (command ?? ''),
+            args: !remote && args ? JSON.stringify(args) : null,
+            env: !remote ? serializeSecretJson(env) : null,
+            transport,
+            url: remote ? (url?.trim() || null) : null,
+            headers: remote ? serializeSecretJson(headers) : null,
             status,
             createdByAgentId: ctx.agentId,
             createdAt: now,
@@ -58,7 +87,7 @@ export const addMcpServerTool: ToolRegistration = {
             mcpServerId: id,
           })
 
-          log.info({ serverId: id, name, agentId: ctx.agentId, status }, 'MCP server created by Agent')
+          log.info({ serverId: id, name, transport, agentId: ctx.agentId, status }, 'MCP server created by Agent')
 
           sseManager.broadcast({
             type: 'mcp-server:created',
@@ -81,6 +110,7 @@ export const addMcpServerTool: ToolRegistration = {
           return {
             serverId: id,
             name,
+            transport,
             status,
             message: status === 'pending_approval'
               ? 'MCP server created — awaiting user approval before activation.'
@@ -101,50 +131,87 @@ export const updateMcpServerTool: ToolRegistration = {
   availability: ['main'],
   create: (ctx) =>
     tool({
-      description: 'Update an MCP server configuration (name, command, args, env).',
+      description: 'Update an MCP server configuration (name, transport, command, args, env, url, headers).',
       inputSchema: z.object({
         server_id: z.string(),
         name: z.string().optional(),
+        transport: transportSchema,
         command: z.string().optional(),
         args: z.array(z.string()).optional(),
         env: z.object({}).catchall(z.string()).optional().describe('Environment variables as key-value pairs. Merged with existing. Pass null to clear all.'),
+        url: z.string().optional(),
+        headers: z.object({}).catchall(z.string()).optional().describe('HTTP headers as key-value pairs. Merged with existing. Pass null to clear all.'),
       }),
-      execute: async ({ server_id, name, command, args, env }) => {
+      execute: async ({ server_id, name, transport: rawTransport, command, args, env, url, headers }) => {
         try {
           const existing = await db.select().from(mcpServers).where(eq(mcpServers.id, server_id)).get()
           if (!existing) return { error: 'MCP server not found' }
 
-          const updates: Partial<typeof mcpServers.$inferInsert> = { updatedAt: new Date() }
-          if (name !== undefined) updates.name = name
-          if (command !== undefined) updates.command = command
-          if (args !== undefined) updates.args = JSON.stringify(args)
+          const nextTransport: McpTransport = rawTransport !== undefined
+            ? normalizeMcpTransport(rawTransport)
+            : normalizeMcpTransport(existing.transport)
+          const nextName = name ?? existing.name
+          const nextCommand = command ?? existing.command ?? ''
+          const nextUrl = url !== undefined ? (url.trim() || null) : existing.url
+          const nextArgs = args !== undefined ? args : parseArgs(existing.args)
+
+          let nextEnv: Record<string, string> | null = parseSecretRecord(existing.env)
           if (env !== undefined) {
-            if (env) {
-              // Merge: preserve existing env vars not included in the update
-              const existingEnv = existing.env ? JSON.parse(existing.env) as Record<string, string> : {}
-              const merged: Record<string, string> = { ...existingEnv, ...env }
-              updates.env = JSON.stringify(merged)
-            } else {
-              updates.env = null
-            }
+            // Additive like the original agent merge, but empty values preserve
+            // stored secrets the same way REST PATCH does via mergeSecretRecord.
+            const existingEnv = parseSecretRecord(existing.env)
+            nextEnv = env ? { ...existingEnv, ...mergeSecretRecord(existingEnv, env) } : null
+          }
+
+          let nextHeaders: Record<string, string> | null = parseSecretRecord(existing.headers)
+          if (headers !== undefined) {
+            const existingHeaders = parseSecretRecord(existing.headers)
+            nextHeaders = headers ? { ...existingHeaders, ...mergeSecretRecord(existingHeaders, headers) } : null
+          }
+
+          const validation = validateMcpServerConfig({
+            name: nextName,
+            transport: nextTransport,
+            command: nextCommand,
+            url: nextUrl,
+            args: nextArgs,
+            env: nextEnv,
+            headers: nextHeaders,
+          })
+          if (!validation.ok) return { error: validation.message }
+
+          const remote = isRemoteMcpTransport(nextTransport)
+          const updates: Partial<typeof mcpServers.$inferInsert> = {
+            updatedAt: new Date(),
+            name: nextName,
+            transport: nextTransport,
+            command: remote ? '' : nextCommand,
+            args: !remote && nextArgs.length > 0 ? JSON.stringify(nextArgs) : null,
+            env: !remote ? serializeSecretJson(nextEnv) : null,
+            url: remote ? nextUrl : null,
+            headers: remote ? serializeSecretJson(nextHeaders) : null,
           }
 
           await db.update(mcpServers).set(updates).where(eq(mcpServers.id, server_id))
 
-          // Disconnect if config changed so next call reconnects with new config
-          const configChanged = command !== undefined || args !== undefined || env !== undefined
+          const configChanged = rawTransport !== undefined
+            || command !== undefined
+            || args !== undefined
+            || env !== undefined
+            || url !== undefined
+            || headers !== undefined
           if (configChanged) {
             await disconnectServer(server_id)
           }
 
-          log.info({ serverId: server_id, agentId: ctx.agentId, configChanged }, 'MCP server updated by Agent')
+          log.info({ serverId: server_id, agentId: ctx.agentId, transport: nextTransport, configChanged }, 'MCP server updated by Agent')
 
           sseManager.broadcast({
             type: 'mcp-server:updated',
-            data: { mcpServerId: server_id, name: name ?? existing.name },
+            data: { mcpServerId: server_id, name: nextName },
           })
 
-          return { success: true, serverId: server_id }
+          return { success: true, serverId: server_id, transport: nextTransport }
         } catch (err) {
           return { error: err instanceof Error ? err.message : 'Unknown error' }
         }
@@ -195,21 +262,27 @@ export const listMcpServersTool: ToolRegistration = {
   availability: ['main'],
   readOnly: true,
   concurrencySafe: true,
-  create: (ctx) =>
+  create: (_ctx) =>
     tool({
       description: 'List all MCP servers on the platform.',
       inputSchema: z.object({}),
       execute: async () => {
         const servers = await db.select().from(mcpServers).all()
         return {
-          servers: servers.map((s) => ({
-            id: s.id,
-            name: s.name,
-            command: s.command,
-            args: s.args ? JSON.parse(s.args) : [],
-            status: s.status,
-            createdByAgentId: s.createdByAgentId,
-          })),
+          servers: servers.map((s) => {
+            const transport = normalizeMcpTransport(s.transport)
+            const remote = isRemoteMcpTransport(transport)
+            return {
+              id: s.id,
+              name: s.name,
+              transport,
+              command: remote ? null : s.command,
+              args: remote ? [] : parseArgs(s.args),
+              url: s.url ?? null,
+              status: s.status,
+              createdByAgentId: s.createdByAgentId,
+            }
+          }),
         }
       },
     }),

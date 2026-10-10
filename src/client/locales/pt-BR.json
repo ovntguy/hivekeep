@@ -1006,13 +1006,23 @@
     },
     "regenerate": "Gerar novamente",
     "toolsBadge": {
+      "label": "{{granted}}/{{max}}",
       "tooltip_one": "{{count}} ferramenta disponível, clique para listá-la",
-      "tooltip_other": "{{count}} ferramentas disponíveis, clique para listá-las"
+      "tooltip_other": "{{count}} ferramentas disponíveis, clique para listá-las",
+      "tooltipWithMax_one": "{{count}} de {{max}} ferramentas que este modelo aceita - clique para listá-la",
+      "tooltipWithMax_other": "{{count}} de {{max}} ferramentas que este modelo aceita - clique para listá-las",
+      "tooltipOverCap_one": "{{count}} concedida; este modelo aceita só {{max}} por turno (o restante é descartado) - clique para listá-la",
+      "tooltipOverCap_other": "{{count}} concedidas; este modelo aceita só {{max}} por turno (o restante é descartado) - clique para listá-las",
+      "tooltipUnsupported_one": "{{count}} ferramenta concedida, mas este modelo não pode chamar ferramentas - clique para listá-la",
+      "tooltipUnsupported_other": "{{count}} ferramentas concedidas, mas este modelo não pode chamar ferramentas - clique para listá-las"
     },
     "toolsModal": {
       "title": "{{name}}: ferramentas",
       "description": "Todas as ferramentas atualmente expostas a este agente, agrupadas por domínio.",
       "descriptionQuick": "Ferramentas expostas nesta sessão rápida (ferramentas restritas à sessão, como tarefas, crons e mensagens entre agentes, são excluídas).",
+      "capHint": "Este modelo aceita {{max}} ferramentas por turno.",
+      "capOver": "{{granted}} concedidas; o que passar de {{max}} é descartado a cada turno.",
+      "capUnsupported": "Este modelo não pode chamar ferramentas, então nenhuma é enviada.",
       "edit": "Editar ferramentas"
     },
     "mobileInfo": {
@@ -1574,7 +1584,7 @@
       "description": "Gerencie servidores Model Context Protocol que fornecem ferramentas externas aos seus Agentes.",
       "empty": "Nenhum servidor MCP configurado",
       "add": "Adicionar servidor MCP",
-      "addHint": "Conecte um servidor de ferramentas externo",
+      "addHint": "Conecte um comando local ou um servidor MCP HTTP remoto",
       "edit": "Editar servidor MCP",
       "editHint": "Atualize a configuração do servidor",
       "name": "Nome",
@@ -1601,20 +1611,42 @@
       "testConnection": "Testar conexão",
       "createdByAgent": "por {{name}}",
       "createdByAdmin": "pelo admin",
-      "emptyDescription": "Servidores MCP estendem seus Agentes com ferramentas e fontes de dados externas.",
+      "emptyDescription": "Servidores MCP ampliam seus Agentes com ferramentas e fontes de dados externas, localmente ou via HTTP.",
       "nameTip": "Um nome amigável para identificar este servidor na lista.",
       "commandTip": "O executável a rodar. Geralmente npx para pacotes npm, ou um caminho absoluto para um binário.",
       "argsTip": "Argumentos de linha de comando passados ao servidor. Coloque cada argumento em sua própria linha.",
       "envTip": "Variáveis de ambiente passadas ao processo do servidor. Use para chaves de API e segredos.",
       "envPreserveHint": "Deixe os valores vazios para manter os segredos existentes",
       "help": {
-        "content": "Servidores MCP (Model Context Protocol) são programas externos que dão aos seus Agentes capacidades adicionais além das ferramentas integradas. Eles rodam como processos separados e se comunicam por um protocolo padrão.",
-        "bullet1": "Cada servidor MCP fornece uma ou mais ferramentas (ex.: busca de arquivos, consultas a banco de dados, integrações de API)",
-        "bullet2": "Os servidores iniciam automaticamente quando um Agente precisa deles e param quando ociosos",
-        "bullet3": "Variáveis de ambiente permitem passar chaves de API e segredos com segurança ao processo do servidor",
-        "bullet4": "Os Agentes também podem descobrir e adicionar servidores MCP por conta própria (exibidos como \"Aguardando aprovação\")"
+        "content": "Servidores MCP (Model Context Protocol) dão ferramentas extras aos seus Agentes. Conecte um comando local via stdio ou um servidor remoto via Streamable HTTP (ou SSE legado).",
+        "bullet1": "Cada servidor MCP fornece uma ou mais ferramentas (ex.: busca de arquivos, consultas a banco, integrações de API)",
+        "bullet2": "Servidores locais iniciam quando um Agente precisa. Servidores HTTP remotos conectam no primeiro uso e são reutilizados",
+        "bullet3": "Variáveis de ambiente (local) e cabeçalhos ou token Bearer (remoto) ficam no servidor e nunca aparecem na interface",
+        "bullet4": "Agentes também podem descobrir e adicionar servidores MCP sozinhos (exibidos como \"Pendente de aprovação\")",
+        "bullet5": "HTTP remoto é o caminho mais simples no Windows: sem npx local, binário, WSL ou Docker"
       },
-      "search": "Pesquisar servidores..."
+      "search": "Pesquisar servidores...",
+      "transport": "Conexão",
+      "transportTip": "O comando local executa um processo neste host. A URL remota conecta via HTTP, mais simples no Windows quando há um servidor MCP hospedado.",
+      "transportStdio": "Comando local",
+      "transportRemote": "URL remota",
+      "url": "URL",
+      "urlPlaceholder": "https://mcp.example.com/mcp",
+      "urlTip": "Endpoint HTTP ou HTTPS do servidor MCP remoto.",
+      "httpMode": "Transporte HTTP",
+      "httpModeTip": "Streamable HTTP é o transporte MCP remoto atual. SSE é o transporte antigo, para servidores que ainda não suportam Streamable HTTP.",
+      "httpStreamable": "Streamable HTTP",
+      "httpSse": "SSE (legado)",
+      "bearerToken": "Token Bearer",
+      "bearerTokenPlaceholder": "Token de acesso",
+      "bearerTokenTip": "Enviado como cabeçalho Authorization: Bearer. Deixe vazio ao editar para manter o token existente.",
+      "bearerTokenPreserveHint": "Deixe vazio para manter o token existente",
+      "headers": "Cabeçalhos HTTP",
+      "headersTip": "Cabeçalhos extras para o servidor remoto. Use para chaves de API. Os valores nunca voltam para a interface.",
+      "headerKeyPlaceholder": "Cabeçalho",
+      "headerValuePlaceholder": "valor",
+      "addHeader": "Adicionar cabeçalho",
+      "headersPreserveHint": "Deixe os valores vazios para manter os segredos existentes"
     },
     "vault": {
       "title": "Cofre",
@@ -2591,7 +2623,10 @@
     "loading": "Carregando modelos…",
     "vision": "visão",
     "img2img": "img2img",
-    "multiImage": "multirreferência ({{count}})"
+    "multiImage": "multirreferência ({{count}})",
+    "maxTools_one": "{{count}} ferramenta",
+    "maxTools_other": "{{count}} ferramentas",
+    "noToolCalls": "sem ferramentas"
   },
   "account": {
     "title": "Minha conta",

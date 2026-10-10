@@ -4,10 +4,20 @@ import { v4 as uuid } from 'uuid'
 import { db } from '@/server/db/index'
 import { mcpServers } from '@/server/db/schema'
 import { disconnectServer, getConnectionStatus, testConnection } from '@/server/services/mcp'
+import {
+  isRemoteMcpTransport,
+  maskSecretRecord,
+  mergeSecretRecord,
+  normalizeMcpTransport,
+  parseSecretRecord,
+  serializeSecretJson,
+  validateMcpServerConfig,
+} from '@/server/services/mcp-config'
 import { sseManager } from '@/server/sse/index'
 import type { AppVariables } from '@/server/app'
 import { createLogger } from '@/server/logger'
 import { requireAdmin } from '@/server/auth/require-admin'
+import type { McpTransport } from '@/shared/types'
 
 const log = createLogger('routes:mcp-servers')
 
@@ -17,20 +27,35 @@ export const mcpServerRoutes = new Hono<{ Variables: AppVariables }>()
 // configuration and admin-only.
 mcpServerRoutes.use('*', (c, next) => (c.req.method === 'GET' ? next() : requireAdmin(c, next)))
 
+interface McpServerBody {
+  name?: string
+  transport?: McpTransport
+  command?: string
+  args?: string[]
+  env?: Record<string, string> | null
+  url?: string | null
+  headers?: Record<string, string> | null
+  status?: string
+  createdByAgentId?: string
+}
+
 function serialize(server: typeof mcpServers.$inferSelect) {
-  // Never expose env var values to the frontend — only return keys with empty strings
-  const envParsed = server.env ? JSON.parse(server.env) as Record<string, string> : null
-  const maskedEnv = envParsed
-    ? Object.fromEntries(Object.keys(envParsed).map((k) => [k, '']))
-    : null
+  // Never expose env/header values to the frontend — only return keys with empty strings
+  const envParsed = parseSecretRecord(server.env)
+  const headersParsed = parseSecretRecord(server.headers)
+  const transport = normalizeMcpTransport(server.transport)
 
   return {
     id: server.id,
     name: server.name,
-    command: server.command,
+    transport,
+    command: isRemoteMcpTransport(transport) ? null : server.command,
     args: server.args ? JSON.parse(server.args) : [],
-    env: maskedEnv,
-    hasEnv: envParsed !== null && Object.keys(envParsed).length > 0,
+    env: maskSecretRecord(envParsed),
+    hasEnv: Object.keys(envParsed).length > 0,
+    url: server.url ?? null,
+    headers: maskSecretRecord(headersParsed),
+    hasHeaders: Object.keys(headersParsed).length > 0,
     status: server.status,
     createdByAgentId: server.createdByAgentId,
     createdAt: new Date(server.createdAt).getTime(),
@@ -46,64 +71,46 @@ mcpServerRoutes.get('/', async (c) => {
 
 // POST /api/mcp-servers — create a new MCP server
 mcpServerRoutes.post('/', async (c) => {
-  const body = await c.req.json<{
-    name: string
-    command: string
-    args?: string[]
-    env?: Record<string, string>
-    status?: string
-    createdByAgentId?: string
-  }>()
+  const body = await c.req.json<McpServerBody>()
 
-  const trimmedName = body.name?.trim()
-  const trimmedCommand = body.command?.trim()
+  const transport = normalizeMcpTransport(body.transport)
+  const trimmedName = body.name?.trim() ?? ''
+  const trimmedCommand = body.command?.trim() ?? ''
+  const trimmedUrl = body.url?.trim() || null
 
-  if (!trimmedName || !trimmedCommand) {
-    return c.json(
-      { error: { code: 'VALIDATION_ERROR', message: 'name and command are required' } },
-      400,
-    )
-  }
-
-  if (trimmedName.length > 200) {
-    return c.json({ error: { code: 'VALIDATION_ERROR', message: 'name must be 200 characters or fewer' } }, 400)
-  }
-  if (trimmedCommand.length > 500) {
-    return c.json({ error: { code: 'VALIDATION_ERROR', message: 'command must be 500 characters or fewer' } }, 400)
-  }
-  if (body.args && body.args.length > 50) {
-    return c.json({ error: { code: 'VALIDATION_ERROR', message: 'maximum 50 arguments allowed' } }, 400)
-  }
-  if (body.args?.some((a: string) => a.length > 1000)) {
-    return c.json({ error: { code: 'VALIDATION_ERROR', message: 'each argument must be 1000 characters or fewer' } }, 400)
-  }
-  if (body.env) {
-    const entries = Object.entries(body.env)
-    if (entries.length > 50) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'maximum 50 environment variables allowed' } }, 400)
-    }
-    for (const [k, v] of entries) {
-      if (k.length > 100) return c.json({ error: { code: 'VALIDATION_ERROR', message: `env key "${k.slice(0, 20)}..." must be 100 characters or fewer` } }, 400)
-      if (typeof v === 'string' && v.length > 10000) return c.json({ error: { code: 'VALIDATION_ERROR', message: `env value for "${k}" must be 10000 characters or fewer` } }, 400)
-    }
+  const validation = validateMcpServerConfig({
+    name: trimmedName,
+    transport,
+    command: trimmedCommand,
+    url: trimmedUrl,
+    args: body.args ?? null,
+    env: body.env ?? null,
+    headers: body.headers ?? null,
+  })
+  if (!validation.ok) {
+    return c.json({ error: { code: 'VALIDATION_ERROR', message: validation.message } }, 400)
   }
 
   const id = uuid()
   const now = new Date()
+  const remote = isRemoteMcpTransport(transport)
 
   await db.insert(mcpServers).values({
     id,
     name: trimmedName,
-    command: trimmedCommand,
-    args: body.args ? JSON.stringify(body.args) : null,
-    env: body.env ? JSON.stringify(body.env) : null,
+    command: remote ? '' : trimmedCommand,
+    args: !remote && body.args ? JSON.stringify(body.args) : null,
+    env: !remote ? serializeSecretJson(body.env) : null,
+    transport,
+    url: remote ? trimmedUrl : null,
+    headers: remote ? serializeSecretJson(body.headers) : null,
     status: body.status ?? 'active',
     createdByAgentId: body.createdByAgentId ?? null,
     createdAt: now,
     updatedAt: now,
   })
 
-  log.info({ serverId: id, name: body.name, command: body.command, status: body.status ?? 'active' }, 'MCP server created')
+  log.info({ serverId: id, name: trimmedName, transport, status: body.status ?? 'active' }, 'MCP server created')
 
   const created = await db.select().from(mcpServers).where(eq(mcpServers.id, id)).get()
   const serialized = serialize(created!)
@@ -125,83 +132,70 @@ mcpServerRoutes.patch('/:id', async (c) => {
     return c.json({ error: { code: 'NOT_FOUND', message: 'MCP server not found' } }, 404)
   }
 
-  const body = await c.req.json<{
-    name?: string
-    command?: string
-    args?: string[]
-    env?: Record<string, string>
-  }>()
+  const body = await c.req.json<McpServerBody>()
 
-  const updates: Partial<typeof mcpServers.$inferInsert> = { updatedAt: new Date() }
+  const nextTransport = body.transport !== undefined
+    ? normalizeMcpTransport(body.transport)
+    : normalizeMcpTransport(existing.transport)
+  const nextName = body.name !== undefined ? body.name.trim() : existing.name
+  const nextCommand = body.command !== undefined ? body.command.trim() : existing.command
+  const nextUrl = body.url !== undefined ? (body.url?.trim() || null) : existing.url
+  const nextArgs = body.args !== undefined ? body.args : (existing.args ? JSON.parse(existing.args) as string[] : null)
 
-  if (body.name !== undefined) {
-    const trimmed = body.name.trim()
-    if (!trimmed) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'name cannot be empty' } }, 400)
-    }
-    if (trimmed.length > 200) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'name must be 200 characters or fewer' } }, 400)
-    }
-    updates.name = trimmed
-  }
-
-  if (body.command !== undefined) {
-    const trimmed = body.command.trim()
-    if (!trimmed) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'command cannot be empty' } }, 400)
-    }
-    if (trimmed.length > 500) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'command must be 500 characters or fewer' } }, 400)
-    }
-    updates.command = trimmed
-  }
-
-  if (body.args !== undefined) {
-    if (Array.isArray(body.args) && body.args.length > 50) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'maximum 50 arguments allowed' } }, 400)
-    }
-    if (Array.isArray(body.args) && body.args.some((a: string) => a.length > 1000)) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'each argument must be 1000 characters or fewer' } }, 400)
-    }
-    updates.args = JSON.stringify(body.args)
-  }
-
+  let nextEnv: Record<string, string> | null = parseSecretRecord(existing.env)
   if (body.env !== undefined) {
-    if (!body.env) {
-      updates.env = null
-    } else if (typeof body.env === 'object') {
-      const envEntries = Object.entries(body.env)
-      if (envEntries.length > 50) {
-        return c.json({ error: { code: 'VALIDATION_ERROR', message: 'maximum 50 environment variables allowed' } }, 400)
-      }
-      for (const [k, v] of envEntries) {
-        if (k.length > 100) return c.json({ error: { code: 'VALIDATION_ERROR', message: `env key "${k.slice(0, 20)}..." must be 100 characters or fewer` } }, 400)
-        if (typeof v === 'string' && v.length > 10000) return c.json({ error: { code: 'VALIDATION_ERROR', message: `env value for "${k}" must be 10000 characters or fewer` } }, 400)
-      }
-    }
+    nextEnv = body.env
+      ? mergeSecretRecord(parseSecretRecord(existing.env), body.env)
+      : null
+  }
 
-    if (body.env && typeof body.env === 'object') {
-      // Merge: empty string values preserve existing secrets (since we don't send values to frontend)
-      const existingEnv = existing.env ? JSON.parse(existing.env) as Record<string, string> : {}
-      const merged: Record<string, string> = {}
-      for (const [k, v] of Object.entries(body.env)) {
-        merged[k] = v || existingEnv[k] || ''
-      }
-      updates.env = JSON.stringify(merged)
-    }
+  let nextHeaders: Record<string, string> | null = parseSecretRecord(existing.headers)
+  if (body.headers !== undefined) {
+    nextHeaders = body.headers
+      ? mergeSecretRecord(parseSecretRecord(existing.headers), body.headers)
+      : null
+  }
+
+  const validation = validateMcpServerConfig({
+    name: nextName,
+    transport: nextTransport,
+    command: nextCommand ?? '',
+    url: nextUrl,
+    args: nextArgs,
+    env: nextEnv,
+    headers: nextHeaders,
+  })
+  if (!validation.ok) {
+    return c.json({ error: { code: 'VALIDATION_ERROR', message: validation.message } }, 400)
+  }
+
+  const remote = isRemoteMcpTransport(nextTransport)
+  const updates: Partial<typeof mcpServers.$inferInsert> = {
+    updatedAt: new Date(),
+    name: nextName,
+    transport: nextTransport,
+    command: remote ? '' : nextCommand,
+    args: !remote && nextArgs ? JSON.stringify(nextArgs) : null,
+    env: !remote ? serializeSecretJson(nextEnv) : null,
+    url: remote ? nextUrl : null,
+    headers: remote ? serializeSecretJson(nextHeaders) : null,
   }
 
   await db.update(mcpServers).set(updates).where(eq(mcpServers.id, id))
 
-  // If command, args, or env changed, disconnect so next call reconnects with new config
-  const configChanged = body.command !== undefined || body.args !== undefined || body.env !== undefined
+  const configChanged = body.transport !== undefined
+    || body.command !== undefined
+    || body.args !== undefined
+    || body.env !== undefined
+    || body.url !== undefined
+    || body.headers !== undefined
   if (configChanged) {
     await disconnectServer(id)
   }
 
   const updated = await db.select().from(mcpServers).where(eq(mcpServers.id, id)).get()
   const serializedUpdated = serialize(updated!)
-  log.info({ serverId: id, name: updated!.name, configChanged }, 'MCP server updated')
+  log.info({ serverId: id, name: updated!.name, transport: nextTransport, configChanged }, 'MCP server updated')
 
   sseManager.broadcast({
     type: 'mcp-server:updated',

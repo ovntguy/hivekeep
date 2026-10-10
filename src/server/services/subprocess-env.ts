@@ -7,6 +7,8 @@
  * vars a shell genuinely needs and nothing else.
  */
 
+import { WINDOWS_SAFE_ENV_VARS } from '@/server/services/host-platform'
+
 const SAFE_ENV_VARS = [
   'PATH',
   'HOME',
@@ -34,6 +36,7 @@ const SAFE_ENV_VARS = [
   'http_proxy',
   'https_proxy',
   'no_proxy',
+  ...WINDOWS_SAFE_ENV_VARS,
 ] as const
 
 const SAFE_ENV_PREFIXES = ['LC_'] as const

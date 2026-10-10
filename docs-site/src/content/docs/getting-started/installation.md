@@ -49,6 +49,24 @@ ENCRYPTION_KEY=$(openssl rand -hex 32) docker compose up -d
 
 See [`docker/docker-compose.yml`](https://github.com/MarlBurroW/hivekeep/blob/main/docker/docker-compose.yml) for all options.
 
+## Windows 11 (native Bun, no WSL)
+
+The bash `install.sh` one-liner is Linux and macOS only. On Windows 11 you can install and run Hivekeep with **native Bun** (no WSL, no Docker):
+
+1. Install [Git for Windows](https://git-scm.com/download/win) and [Bun](https://bun.sh) (`irm https://bun.sh/install.ps1 | iex`).
+2. Clone this repository and, from PowerShell:
+
+```powershell
+.\scripts\windows\Install-Hivekeep.ps1
+.\scripts\windows\Start-Hivekeep.ps1
+```
+
+3. Open `http://localhost:3000`. Confirm `GET /api/health` and first-run `GET /api/onboarding/status` (`completed: false` until an admin exists).
+
+Optional: register a **Task Scheduler** task (at logon or on demand) with `.\scripts\windows\Register-HivekeepService.ps1`. That is not systemd, Docker, or WSL.
+
+Full runbook, `.env` / data-dir notes, and troubleshooting (husky exit codes, `better-sqlite3`, `sqlite-vec`, Playwright, PATH): **[docs/windows.md](https://github.com/MarlBurroW/hivekeep/blob/main/docs/windows.md)** in the repository. Honest limitations: **[docs/windows-gaps.md](https://github.com/MarlBurroW/hivekeep/blob/main/docs/windows-gaps.md)**. Playwright browsers are **not** required for the server or Queenie onboarding.
+
 ## Manual install
 
 ```bash
@@ -64,6 +82,7 @@ NODE_ENV=production bun run start
 
 - [Bun](https://bun.sh) >= 1.0
 - Git
+- Windows 11 native path: see [Windows 11 (native Bun)](#windows-11-native-bun-no-wsl) above
 
 ## What's next?
 

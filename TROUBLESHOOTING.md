@@ -25,6 +25,8 @@ xcode-select --install
 
 Then retry `bun install`.
 
+**Windows 11:** a native Bun install can succeed without Visual Studio Build Tools. If `node-gyp` / `vswhere` / `better-sqlite3` **does** fail on your machine, install VS Build Tools with the C++ workload (see [docs/windows.md](docs/windows.md#better-sqlite3--node-gyp--missing-vswhere)). The running server uses `bun:sqlite`, not `better-sqlite3`. Full Windows runbook: [docs/windows.md](docs/windows.md).
+
 ### `bun install` hangs or fails on lockfile
 
 If you see errors about `bun.lock`:

@@ -8,6 +8,7 @@ import { openrouterProvider } from '@/server/llm/llm/openrouter'
 import { kiloProvider } from '@/server/llm/llm/kilo'
 import { ollamaProvider } from '@/server/llm/llm/ollama'
 import { xaiProvider } from '@/server/llm/llm/xai'
+import { xaiOAuthProvider } from '@/server/llm/llm/xai-oauth'
 import { deepseekProvider } from '@/server/llm/llm/deepseek'
 import { minimaxProvider } from '@/server/llm/llm/minimax'
 import { moonshotProvider } from '@/server/llm/llm/moonshot'
@@ -31,6 +32,7 @@ export function registerBuiltinLLMProviders(): void {
   registerLLMProvider(kiloProvider)
   registerLLMProvider(ollamaProvider)
   registerLLMProvider(xaiProvider)
+  registerLLMProvider(xaiOAuthProvider)
   registerLLMProvider(deepseekProvider)
   registerLLMProvider(minimaxProvider)
   registerLLMProvider(moonshotProvider)

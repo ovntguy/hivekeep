@@ -9,13 +9,17 @@ import { CheckCircle, Pencil, Plug, RefreshCw, Loader2 } from 'lucide-react'
 import { ConfirmDeleteButton } from '@/client/components/common/ConfirmDeleteButton'
 import { cn } from '@/client/lib/utils'
 import { api } from '@/client/lib/api'
+import type { McpTransport } from '@/shared/types'
 
 export interface McpServerData {
   id: string
   name: string
-  command: string
+  transport?: McpTransport
+  command: string | null
   args: string[]
   env: Record<string, string> | null
+  url: string | null
+  headers: Record<string, string> | null
   status: string
   createdByAgentId: string | null
   createdAt: number
@@ -43,7 +47,15 @@ export function McpServerCard({ server, agentName, agentAvatarUrl, onApprove, on
   const [testing, setTesting] = useState(false)
 
   const isPending = server.status === 'pending_approval'
+  const transport = server.transport ?? 'stdio'
+  const isRemote = transport === 'http' || transport === 'sse'
   const envKeys = server.env ? Object.keys(server.env) : []
+  const headerKeys = server.headers
+    ? Object.keys(server.headers).filter((k) => k.toLowerCase() !== 'authorization')
+    : []
+  const subtitle = isRemote
+    ? (server.url || '')
+    : [server.command, ...(server.args ?? [])].filter(Boolean).join(' ')
 
   // Fetch connection status on mount for active servers
   useEffect(() => {
@@ -81,12 +93,17 @@ export function McpServerCard({ server, agentName, agentAvatarUrl, onApprove, on
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium truncate">{server.name}</p>
+              {isRemote && (
+                <Badge variant="outline" size="xs" className="shrink-0">
+                  {transport === 'sse' ? t('settings.mcp.httpSse') : t('settings.mcp.httpStreamable')}
+                </Badge>
+              )}
               {isPending ? (
- <Badge variant="outline" size="xs" className="shrink-0 border-warning text-warning">
+                <Badge variant="outline" size="xs" className="shrink-0 border-warning text-warning">
                   {t('settings.mcp.statusPending')}
                 </Badge>
               ) : (
- <Badge variant="secondary" size="xs" className="shrink-0">
+                <Badge variant="secondary" size="xs" className="shrink-0">
                   {t('settings.mcp.statusActive')}
                 </Badge>
               )}
@@ -111,13 +128,17 @@ export function McpServerCard({ server, agentName, agentAvatarUrl, onApprove, on
                 <AgentBadge name={agentName} avatarUrl={agentAvatarUrl} />
               )}
             </div>
-            <p className="text-xs text-muted-foreground truncate">
-              {server.command}
-              {server.args.length > 0 && ` ${server.args.join(' ')}`}
+            <p className="text-xs text-muted-foreground truncate font-mono">
+              {subtitle}
             </p>
             {envKeys.length > 0 && (
               <p className="text-xs text-muted-foreground/70 truncate font-mono">
                 {envKeys.join(', ')}
+              </p>
+            )}
+            {headerKeys.length > 0 && (
+              <p className="text-xs text-muted-foreground/70 truncate font-mono">
+                {headerKeys.join(', ')}
               </p>
             )}
           </div>

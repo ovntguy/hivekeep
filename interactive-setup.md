@@ -33,8 +33,8 @@ generically by the target's declared schema:
 
 But three new connections have **no secret to paste**:
 
-- **Claude Max** and **OpenAI Codex** (subscription LLMs): browser OAuth sign-in
-  (PKCE), then paste back an authorization code.
+- **Claude Max**, **OpenAI Codex**, and **xAI SuperGrok** (subscription LLMs): browser OAuth sign-in
+  (PKCE), then paste back an authorization code. Codex and SuperGrok use a loopback redirect URL the server does not serve — paste the whole URL.
 - **WhatsApp (QR)** (`whatsapp-web` channel): pair by scanning a QR code.
 
 A temporary guardrail (shipped) makes the tools return `manual_setup_required`

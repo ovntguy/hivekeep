@@ -133,6 +133,13 @@ Anthropic models are the most thoroughly tested with Hivekeep's tool system. The
 OpenAI models occasionally fall into "text mode" on complex multi-step tool chains. If this happens, add stronger execution instructions to your system prompt (see the EXEC pattern above).
 :::
 
+### xAI
+
+1. Get an API key from [console.x.ai](https://console.x.ai)
+2. Add as a provider in Hivekeep
+
+xAI also supports **OAuth via SuperGrok** (or X Premium+): in-app sign-in, no API key. SuperGrok OAuth API access may be restricted to certain tiers — if listing models fails after sign-in, use the API-key provider instead.
+
 ### Self-hosted & OpenAI-compatible (Ollama, vLLM, llama.cpp, LM Studio, NewAPI, LiteLLM)
 
 Use the built-in **OpenAI-compatible** provider to point Hivekeep at any OpenAI-style endpoint:
@@ -140,6 +147,7 @@ Use the built-in **OpenAI-compatible** provider to point Hivekeep at any OpenAI-
 1. Add an **OpenAI-compatible** provider in Hivekeep
 2. Set the **Base URL** to your endpoint, including the version path. For Ollama: `http://localhost:11434/v1` (from Docker: `http://host.docker.internal:11434/v1`). After `ollama pull llama3.3:70b`, the model appears in the list.
 3. Set the API key only if your server requires one (local servers usually don't)
+4. Optional: **Extra request body (JSON)** for llama.cpp / `llama-server` sampling (`dry_*`, `repeat_penalty`, `top_k`, `min_p`, …). Hivekeep still owns `temperature` (see `TOOLS_TEMPERATURE`) and the chat payload. Do not paste `prompt` here.
 
 The same connector also covers **embeddings** (`/embeddings`) and **image generation** when the endpoint implements the OpenAI Images API (`/images/generations` — LiteLLM, NewAPI, LocalAI). Stock Ollama / llama.cpp / vLLM typically do not; see [OpenAI-compatible image gaps](/docs/providers/supported/#openai-compatible-image-gaps).
 

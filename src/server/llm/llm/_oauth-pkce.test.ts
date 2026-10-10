@@ -5,6 +5,7 @@ import {
   buildPkceAuthorizeUrl,
   parsePastedCode,
   exchangePkceCode,
+  encodeTokenRequest,
   decodeJwtClaims,
   type PkceClient,
 } from './_oauth-pkce'
@@ -124,6 +125,29 @@ describe('exchangePkceCode', () => {
     expect(captured).toMatchObject({ grant_type: 'authorization_code', code: 'CODE', code_verifier: 'V' })
   })
 
+  it('posts application/x-www-form-urlencoded when the client declares tokenEncoding form', async () => {
+    let captured: { contentType: string; body: string } | null = null
+    globalThis.fetch = (async (_url: any, init: any) => {
+      captured = {
+        contentType: String(init.headers['Content-Type'] ?? init.headers['content-type'] ?? ''),
+        body: String(init.body),
+      }
+      return new Response(JSON.stringify({ access_token: 'AT', refresh_token: 'RT' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as unknown as typeof fetch
+
+    const formClient: PkceClient = { ...CLIENT, tokenEncoding: 'form', includeStateInExchange: false }
+    await exchangePkceCode({ client: formClient, code: 'CODE', verifier: 'VERIFIER' })
+    expect(captured!.contentType).toContain('application/x-www-form-urlencoded')
+    const params = new URLSearchParams(captured!.body)
+    expect(params.get('grant_type')).toBe('authorization_code')
+    expect(params.get('code')).toBe('CODE')
+    expect(params.get('code_verifier')).toBe('VERIFIER')
+    expect(params.get('client_id')).toBe('test-client')
+  })
+
   it('throws with the upstream status + body on failure', async () => {
     globalThis.fetch = (async () =>
       new Response('bad_grant', { status: 400 })) as unknown as typeof fetch
@@ -141,6 +165,20 @@ describe('exchangePkceCode', () => {
     await expect(
       exchangePkceCode({ client: CLIENT, code: 'CODE', verifier: 'V' }),
     ).rejects.toThrow(/no access_token/)
+  })
+})
+
+describe('encodeTokenRequest', () => {
+  it('defaults to JSON', () => {
+    const encoded = encodeTokenRequest(CLIENT, { a: '1' })
+    expect(encoded.headers['Content-Type']).toBe('application/json')
+    expect(JSON.parse(encoded.body)).toEqual({ a: '1' })
+  })
+
+  it('encodes form-urlencoded when asked', () => {
+    const encoded = encodeTokenRequest({ ...CLIENT, tokenEncoding: 'form' }, { a: '1', b: 'two words' })
+    expect(encoded.headers['Content-Type']).toBe('application/x-www-form-urlencoded')
+    expect(encoded.body).toBe('a=1&b=two+words')
   })
 })
 
